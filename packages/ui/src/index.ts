@@ -9,3 +9,4 @@ export * from './addresses';
 export * from './ordering';
 export * from './operations';
 export * from './workbench';
+export * from './search-input';

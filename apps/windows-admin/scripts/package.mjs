@@ -29,12 +29,14 @@ await build({
     productName,
     executableName: fileStem,
     copyright: `© ${new Date().getFullYear()} 绿麒麟水站`,
-    directories: { output: 'release', buildResources: 'build' },
+    directories: { output: production ? 'release' : 'release/test', buildResources: 'build' },
     files: ['package.json', 'src/**/*', '!src/**/*.test.js'],
     // Chromium ships ~55 UI languages; dialogs here only need Chinese (English as fallback).
     electronLanguages: ['zh-CN', 'en-US'],
     // The shell reads these from its packaged package.json; an installed copy cannot be pointed elsewhere.
-    extraMetadata: { productName, kunlunOrigin: origin, kunlunAppId: appId },
+    // Distinct package names give the two installations separate updater cache directories.
+    extraMetadata: { name: production ? pkg.name : pkg.name + '-test', productName, kunlunOrigin: origin, kunlunAppId: appId },
+    publish: { provider: 'generic', url: origin + '/downloads/windows/', useMultipleRangeRequest: false },
     win: { icon: 'build/icon.png' },
     nsis: {
       // Per-user one-click install: no administrator rights needed on the shop computer.

@@ -3,7 +3,7 @@ import {
   KUNLUN_PERMISSIONS as P, PAY_METHODS, containerLabel, containerUnit, modeLabel, money, payMethodLabel, shortDateTime, unitOf, waterFallbackLabel,
   type PayMethod, type RefundKind, type RefundRequestQuery, type RefundRequestRow, type RefundRequestStatus, type ReviewSettings,
 } from '@kunlun/shared';
-import { ConfirmDialog, Field, FormDialog, Icon, ReasonChips, parseYuan, sameYuan, useAuth, useDialogs, useLoader, useRun, useToast } from '@kunlun/ui';
+import { SearchInput, ConfirmDialog, Field, FormDialog, Icon, ReasonChips, parseYuan, sameYuan, useAuth, useDialogs, useLoader, useRun, useToast } from '@kunlun/ui';
 import { EmptyRow, Pager, PAGE_SIZE, useDebounced, usePagedTable } from '../common';
 import { useAdminData } from '../data';
 
@@ -65,7 +65,7 @@ export function Refunds() {
       ))}
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索会员、手机号或单号" aria-label="搜索会员、手机号或单号" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索会员、手机号或单号" aria-label="搜索会员、手机号或单号" value={query} onSearch={setQuery} /></label>
       <select className="select" aria-label="审核类型" value={kind} onChange={e => setKind(e.target.value as RefundKind | '')}>
         <option value="">全部类型</option>
         {(Object.keys(KINDS) as RefundKind[]).map(k => <option key={k} value={k}>{KINDS[k][0]}</option>)}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { KUNLUN_BRAND, containerLabel, pathFor, resolveRoute } from '@kunlun/shared';
-import { ChangePasswordDialog, DialogProvider, Icon, Logo, useAuth, useDialogs, useToast, type IconName } from '@kunlun/ui';
+import { ChangePasswordDialog, DialogProvider, Icon, SearchInput, Logo, useAuth, useDialogs, useToast, type IconName } from '@kunlun/ui';
 import { PAGE_NAMES, useGo } from './common';
 import { AdminDataProvider, useAdminData } from './data';
 import { AdminAlerts } from './AdminAlerts';
@@ -152,11 +152,10 @@ function AdminLayout() {
 
 function Topbar({ page, collapsed, toggle }: { page: string; collapsed: boolean; toggle: () => void }) {
   const { user, logout } = useAuth();
-  const { setMemberQuery } = useAdminData();
+  const { memberQuery, setMemberQuery } = useAdminData();
   const dialogs = useDialogs();
   const go = useGo();
   const [params] = useSearchParams();
-  const [search, setSearch] = useState('');
   // A member's 360° profile is a page under 会员管理, addressed by `?id=`.
   const profile = page === 'members' && params.has('id');
   const label = collapsed ? '展开导航栏' : '收起导航栏';
@@ -168,8 +167,11 @@ function Topbar({ page, collapsed, toggle }: { page: string; collapsed: boolean;
       <div className="breadcrumb">{KUNLUN_BRAND.store} / {GROUP_OF[page] && <>{GROUP_OF[page]} / </>}{profile ? <>{PAGE_NAMES[page]} / <b>会员 360° 档案</b></> : <b>{PAGE_NAMES[page]}</b>} <span className="pill">{KUNLUN_BRAND.product}</span></div>
       <div className="top-actions">
         <label className="search-mini"><Icon name="search" />
-          <input placeholder="搜索姓名、手机号、会员编号或地址" aria-label="搜索会员" value={search} onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { setMemberQuery(search.trim()); setSearch(''); go('members'); } }} />
+          <SearchInput placeholder="搜索姓名、手机号、会员编号或地址" aria-label="搜索会员" value={page === 'members' && !profile ? memberQuery : ''}
+            onSearch={text => {
+              setMemberQuery(text);
+              if (text.trim() && (page !== 'members' || profile)) go('members');
+            }} />
         </label>
         <AdminAlerts key={user.subjectId} />
         <button type="button" className="btn sm" onClick={() => dialogs.open(close => <ChangePasswordDialog onClose={close} />)}>修改密码</button>

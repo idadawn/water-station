@@ -1,6 +1,6 @@
 import { KUNLUN_BRAND, KUNLUN_PERMISSIONS as P, ROLE_LABELS, containerKind, containerLabel, isActiveOrder, money, shortDateTime, ticketGroups, type ContainerSummaryItem, type MobileFeature, type StaffRole, type WaterOrder } from '@kunlun/shared';
 import {
-  ChangePasswordDialog, CounterOrder, Icon, MatchedDeliveryContacts, OrderCard, StockEditDialog, StockQuickDialog, WorkbenchHome, useAuth, useDialogs, useRun,
+  ChangePasswordDialog, CounterOrder, Icon, SearchInput, MatchedDeliveryContacts, OrderCard, StockEditDialog, StockQuickDialog, WorkbenchHome, useAuth, useDialogs, useRun,
   type StockCount,
 } from '@kunlun/ui';
 import { AndroidAppVersion, Loading } from '../shared/H5Shell';
@@ -85,7 +85,7 @@ export function StaffMembers() {
   return <>
     <div className="mobile-top"><h2>会员查询与办理</h2>{canCreate && <button type="button" className="btn primary sm" onClick={ops.newMember}><Icon name="plus" size="sm" />新建</button>}</div>
     <div className="h5-body">
-      <label className="field-search" style={{ marginBottom: 12 }}><Icon name="search" /><input placeholder="输入姓名、手机号、会员编号或地址" aria-label="搜索会员" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="field-search" style={{ marginBottom: 12 }}><Icon name="search" /><SearchInput placeholder="输入姓名、手机号、会员编号或地址" aria-label="搜索会员" value={query} onSearch={setQuery} /></label>
       <div className="h5-section-head"><h3>{query.trim() ? '搜索结果' : '常用会员'}</h3><span>{loaded ? `共 ${memberTotal} 位 · ` : ''}点击查看与办理</span></div>
       {!loaded ? <Loading error={error} onRetry={() => refresh().catch(() => undefined)} /> : members.length === 0 ? <p className="membership-note">{canCreate ? '未找到会员，可点击右上角新建' : '未找到会员'}</p> : members.map(m => (
         <div key={m.id} className="h5-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => ops.detail(m)} onKeyDown={e => e.key === 'Enter' && ops.detail(m)}>

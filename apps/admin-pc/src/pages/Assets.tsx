@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   KUNLUN_PERMISSIONS as P, containerKind, containerLabel, dateFilterRange, money,
   type DateFilter, type CirculationBusinessType, type CirculationRow, type ContainerDamageRow, type ContainerHoldingRow, type ContainerType, type Paged,
 } from '@kunlun/shared';
-import { Field, FormDialog, MemberPicker, ReasonChips, Stepper, useApi, useAuth, useDialogs, useIdempotencyKey, useLoader, useRun, useToast } from '@kunlun/ui';
+import { Field, FormDialog, MemberPicker, SearchInput, ReasonChips, Stepper, useApi, useAuth, useDialogs, useIdempotencyKey, useLoader, useRun, useToast } from '@kunlun/ui';
 import { DateFilterSelect, EmptyRow, Pager, useExport, useGo, useOperations } from '../common';
 import { useAdminData } from '../data';
 
@@ -83,6 +83,13 @@ export function Assets() {
   const [date, setDate] = useState<DateFilter>('ALL');
   const range = dateFilterRange(date);
   const filter = (apply: () => void) => { apply(); setPage(1); };
+
+  useEffect(() => {
+    const next = search.trim();
+    if (next === query) return;
+    const timer = window.setTimeout(() => { setQuery(next); setPage(1); }, next ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [search, query]);
 
   const ledger = useLoader<Ledger>(async () => tab === 'holdings' ? { tab, ...await api.containerHoldings(query, page) }
     : tab === 'movements' ? { tab, ...await api.containerCirculation(query, type, page, range) }
@@ -181,9 +188,7 @@ export function Assets() {
         {TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => filter(() => setTab(id))}>{label}</button>)}
       </div>
       <div className="container-filters">
-        <input className="input" type="search" aria-label="搜索会员或单号" placeholder="姓名、手机号、会员号或单号" value={search}
-          onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') filter(() => setQuery(search.trim())); }} />
-        <button type="button" className="btn sm" onClick={() => filter(() => setQuery(search.trim()))}>查询</button>
+        <SearchInput className="input" type="search" aria-label="搜索会员或单号" placeholder="姓名、手机号、会员号或单号" value={search} onSearch={setSearch} />
         {tab !== 'holdings' && (
           <select className="select" aria-label="容器类型" value={type} onChange={e => filter(() => setType(e.target.value as ContainerType | ''))}>
             <option value="">全部容器</option>{products.map(p => <option key={p.containerId} value={p.containerId}>{containerLabel(p.containerId)}</option>)}

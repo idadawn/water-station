@@ -3,7 +3,7 @@ import {
   containerLabel, dateFilterRange, money, payMethodLabel, shortDateTime,
   type ContainerType, type DateFilter, type DepositFlowType, type DepositLedgerQuery, type DepositLedgerRow,
 } from '@kunlun/shared';
-import { Icon, useAuth } from '@kunlun/ui';
+import { SearchInput, Icon, useAuth } from '@kunlun/ui';
 import { DateFilterSelect, EmptyRow, Pager, StatCard, handledBy, ledgerEmptyText, useDebounced, useExport, useGo, useLedger, useOperations } from '../common';
 import { useAdminData } from '../data';
 
@@ -59,7 +59,7 @@ export function Deposits() {
       ))}
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索会员、手机号或单号" aria-label="搜索会员、手机号或单号" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索会员、手机号或单号" aria-label="搜索会员、手机号或单号" value={query} onSearch={setQuery} /></label>
       <select className="select" aria-label="容器" value={container} onChange={e => setContainer(e.target.value as ContainerType | '')}>
         <option value="">全部容器</option>{containers.map(c => <option key={c.containerType} value={c.containerType}>{containerLabel(c.containerType)}</option>)}
       </select>

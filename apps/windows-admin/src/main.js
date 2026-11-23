@@ -2,7 +2,9 @@
  * Windows desktop shell for the admin site: one window showing the live /admin pages of the server
  * baked in at packaging time. Pages come from the server, so publishing the site updates every desk.
  */
-import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, screen, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, Notification, dialog, ipcMain, safeStorage, screen, session, shell } from 'electron';
+import electronUpdater from 'electron-updater';
+import { startDesktopUpdates } from './updates.js';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -241,6 +243,12 @@ function start() {
   Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]) : null);
   setupSession(origin);
   createWindow(origin);
+  if (app.isPackaged && process.platform === 'win32') {
+    const stopChecking = startDesktopUpdates(electronUpdater.autoUpdater, version => {
+      if (Notification.isSupported()) new Notification({ title: app.getName(), body: `新版 ${version} 已下载，关闭客户端后自动安装。` }).show();
+    });
+    app.once('will-quit', stopChecking);
+  }
 }
 
 app.on('web-contents-created', (_event, contents) => contents.on('will-attach-webview', event => event.preventDefault()));

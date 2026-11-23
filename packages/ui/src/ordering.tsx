@@ -1,3 +1,4 @@
+import { SearchInput } from './search-input';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   KUNLUN_BRAND, KUNLUN_PERMISSIONS as P, PAY_METHODS, containerKind, containerUnit, modeLabel, money, payMethodLabel, ticketSummary, ticketsFor, unitOf,
@@ -679,7 +680,7 @@ function CustomerSearch({ onPick, onNewMember }: { onPick: (memberId: string) =>
   return (
     <div className="counter-search">
       <label className="counter-search-box"><Icon name="search" />
-        <input autoFocus inputMode="search" placeholder="顾客姓名、手机号、会员号或地址" aria-label="查找顾客" value={query} onChange={e => setQuery(e.target.value)} />
+        <SearchInput autoFocus inputMode="search" placeholder="顾客姓名、手机号、会员号或地址" aria-label="查找顾客" value={query} onSearch={setQuery} />
       </label>
       {members.error ? <p className="account-error" role="alert">{members.error}</p>
         : !members.data ? <p className="membership-note">正在查找…</p>
