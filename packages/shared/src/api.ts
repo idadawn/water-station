@@ -1,3 +1,4 @@
+import type { CalendarRange } from './format';
 import type {
   ActiveStatus,
   AdminAlertSnapshot,
@@ -181,6 +182,9 @@ export class KunlunApi {
     return data;
   }
   memberProfile(memberId: string) { return this.request<MemberProfile>(`/api/members/${memberId}/profile`); }
+  updateMemberContact(id: string, name: string, phone: string) {
+    return this.put<Pick<MemberProfile, 'id' | 'name' | 'phone'>>('/api/members/' + id + '/contact', { name, phone });
+  }
   memberPhoneAvailability(phone: string) { return this.request<{ available: boolean; message: string | null }>('/api/members/phone-availability' + queryString({ phone })); }
   resetMemberPassword(id: string) { return this.post<{ phone: string; temporaryPassword: string }>(`/api/members/${id}/reset-password`); }
   createMember(body: { name: string; phone: string; defaultAddress?: string; doorNo?: string; remark?: string }) {
@@ -298,14 +302,17 @@ export class KunlunApi {
   inventoryOperations(containerType?: ContainerType) {
     return this.request<Array<{ operation: InventoryOperation; memberName: string }>>('/api/containers/inventory-operations' + (containerType ? `?containerType=${containerType}` : ''));
   }
+  inventoryOperationsPage(containerType: ContainerType | '', range: TimeRange, page: number) {
+    return this.request<Paged<{ operation: InventoryOperation; memberName: string }>>('/api/containers/inventory-operations' + queryString({ containerType, ...range, page }));
+  }
   containerHoldings(q: string, page: number) {
     return this.request<Paged<ContainerHoldingRow>>('/api/containers/holdings' + queryString({ q, page }));
   }
-  containerCirculation(q: string, containerType: ContainerType | '', page: number) {
-    return this.request<Paged<CirculationRow>>('/api/containers/circulation' + queryString({ q, containerType, page }));
+  containerCirculation(q: string, containerType: ContainerType | '', page: number, range: TimeRange = {}) {
+    return this.request<Paged<CirculationRow>>('/api/containers/circulation' + queryString({ q, containerType, page, ...range }));
   }
-  containerDamages(q: string, containerType: ContainerType | '', status: string, page: number) {
-    return this.request<Paged<ContainerDamageRow>>('/api/containers/damages' + queryString({ q, containerType, status, page }));
+  containerDamages(q: string, containerType: ContainerType | '', status: string, page: number, range: TimeRange = {}) {
+    return this.request<Paged<ContainerDamageRow>>('/api/containers/damages' + queryString({ q, containerType, status, page, ...range }));
   }
   /** `acceptUncovered` 登记超出已交押金的破损，此时 `uncoveredNote` 必填。 */
   reportDamage(body: { memberId: string; containerType: ContainerType; quantity: number; reason: string; idempotencyKey: string; feePaid?: boolean; acceptUncovered?: boolean; uncoveredNote?: string | null }) {
@@ -317,7 +324,7 @@ export class KunlunApi {
 
   // Reports
   financeSummary() { return this.request<FinanceSummaryReport>('/api/reports/finance-summary'); }
-  operatingPeriod(period: OperatingPeriod) { return this.request<OperatingReport>('/api/reports/operating-period' + queryString({ period })); }
+  operatingPeriod(period: OperatingPeriod, range?: CalendarRange) { return this.request<OperatingReport>('/api/reports/operating-period' + queryString({ period, ...range })); }
   overview() { return this.request<OverviewReport>('/api/reports/overview'); }
   adminAlerts(signal?: AbortSignal) { return this.request<AdminAlertSnapshot>('/api/admin/alerts', { signal, cache: 'no-store' }); }
   rechargeLedger(query: RechargeLedgerQuery = {}) { return this.request<Paged<RechargeLedgerRow>>('/api/ledgers/recharges' + paged(query)); }
@@ -331,7 +338,7 @@ export class KunlunApi {
   expenses(query: ExpenseQuery = {}) { return this.request<Paged<Expense>>('/api/expenses' + paged(query)); }
   expenseSummary(range: TimeRange = {}) { return this.request<ExpenseSummary>('/api/expenses/summary' + queryString(range)); }
 
-  async exportCsv(dataset: ExportDataset): Promise<Blob> {
-    return (await this.send(`/api/exports/${dataset}`)).blob();
+  async exportCsv(dataset: ExportDataset, range: TimeRange = {}): Promise<Blob> {
+    return (await this.send(`/api/exports/${dataset}` + queryString(range))).blob();
   }
 }

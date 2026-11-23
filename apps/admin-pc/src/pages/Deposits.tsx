@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  containerLabel, dateFilterFrom, money, payMethodLabel, shortDateTime,
+  containerLabel, dateFilterRange, money, payMethodLabel, shortDateTime,
   type ContainerType, type DateFilter, type DepositFlowType, type DepositLedgerQuery, type DepositLedgerRow,
 } from '@kunlun/shared';
 import { Icon, useAuth } from '@kunlun/ui';
@@ -22,7 +22,8 @@ export function Deposits() {
   const [date, setDate] = useState<DateFilter>('ALL');
   const [container, setContainer] = useState<ContainerType | ''>('');
   const q = useDebounced(query.trim());
-  const filter: DepositLedgerQuery = { q, from: dateFilterFrom(date), flowType: flow || undefined, containerType: container || undefined };
+  const range = dateFilterRange(date);
+  const filter: DepositLedgerQuery = { q, ...range, flowType: flow || undefined, containerType: container || undefined };
   const filtered = !!(q || filter.from || flow || container);
   const standards = containers
     .map(c => `${containerLabel(c.containerType)} ¥${money(c.unitDeposit)}/个`).join(' · ');
@@ -64,7 +65,7 @@ export function Deposits() {
       </select>
       <DateFilterSelect label="业务时间" value={date} onChange={setDate} />
       <div className="filter-spacer" />
-      <button type="button" className="btn" onClick={() => exportCsv('deposit-ledgers')}><Icon name="export" />导出押金明细</button>
+      <button type="button" className="btn" onClick={() => exportCsv('deposit-ledgers', range)}><Icon name="export" />导出押金明细</button>
     </div>
     <DepositTable filter={filter} filtered={filtered} />
   </>;

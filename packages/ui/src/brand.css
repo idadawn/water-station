@@ -529,3 +529,5 @@ a{color:var(--brand-600);text-decoration:none}
 .membership-fields .opening-inline .input.opening-count{width:90px}
 .opening-change{color:var(--gold-600);font-size:12px;font-weight:600}
 .opening-add{align-self:flex-start}
+
+.matched-delivery-contact{display:block;white-space:normal;overflow-wrap:anywhere}

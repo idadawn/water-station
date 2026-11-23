@@ -168,7 +168,7 @@ function Topbar({ page, collapsed, toggle }: { page: string; collapsed: boolean;
       <div className="breadcrumb">{KUNLUN_BRAND.store} / {GROUP_OF[page] && <>{GROUP_OF[page]} / </>}{profile ? <>{PAGE_NAMES[page]} / <b>会员 360° 档案</b></> : <b>{PAGE_NAMES[page]}</b>} <span className="pill">{KUNLUN_BRAND.product}</span></div>
       <div className="top-actions">
         <label className="search-mini"><Icon name="search" />
-          <input placeholder="搜索会员姓名、手机号、会员编号" aria-label="搜索会员" value={search} onChange={e => setSearch(e.target.value)}
+          <input placeholder="搜索姓名、手机号、会员编号或地址" aria-label="搜索会员" value={search} onChange={e => setSearch(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { setMemberQuery(search.trim()); setSearch(''); go('members'); } }} />
         </label>
         <AdminAlerts key={user.subjectId} />

@@ -177,6 +177,7 @@ function Profile({ member: m }: { member: MemberProfile }) {
         <section className="card">
           <div className="card-head">
             <div className="card-title">基础资料</div>
+            {can(P.MemberWrite) && <button type="button" className="text-btn" onClick={() => ops.editMember(m)}>编辑资料</button>}
           </div>
           <div className="profile-card-body">
             <div className="detail-row"><span>会员编号</span><b>{m.memberNo}</b></div>
@@ -188,7 +189,7 @@ function Profile({ member: m }: { member: MemberProfile }) {
           </div>
         </section>
         <section className="card">
-          <div className="profile-card-body"><AddressBook key={m.id} owner={m} onChanged={refresh} compact /></div>
+          <div className="profile-card-body"><AddressBook key={JSON.stringify([m.id, m.name, m.phone])} owner={m} onChanged={refresh} compact /></div>
         </section>
         <OpeningCard member={m} />
       </div>

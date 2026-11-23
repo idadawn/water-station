@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KUNLUN_PERMISSIONS as P, PHONE_PATTERN, fullAddress, type MemberAddress } from '@kunlun/shared';
+import { KUNLUN_PERMISSIONS as P, PHONE_PATTERN, deliveryContactLabel, fullAddress, type MatchedAddress, type MemberAddress } from '@kunlun/shared';
 import { useApi, useAuth } from './auth';
 import { ConfirmDialog, FormDialog, useDialogs, useRun, useToast } from './feedback';
 import { Icon } from './icons';
+
+export function MatchedDeliveryContacts({ addresses }: { addresses?: MatchedAddress[] }) {
+  return <>{addresses?.map(a => <small className="matched-delivery-contact" key={a.id}>{deliveryContactLabel(a)}</small>)}</>;
+}
 
 export const MAX_MEMBER_ADDRESSES = 20;
 

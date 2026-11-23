@@ -9,10 +9,10 @@ namespace Kunlun.WaterStation.Operations;
 public static class FinanceEndpoints
 {
     /// <summary>Who already has the phone. A disabled member is enabled again rather than created twice.</summary>
-    private static async Task<string?> PhoneTaken(NpgsqlConnection conn, NpgsqlTransaction? tx, Guid tid, string phone, CancellationToken ct)
+    private static async Task<string?> PhoneTaken(NpgsqlConnection conn, NpgsqlTransaction? tx, Guid tid, string phone, CancellationToken ct, Guid? except = null)
     {
-        await using var cmd = TicketBatches.Command(conn, tx, "SELECT name,member_no,status,phone FROM plugin_kunlun_waterstation.members WHERE tenant_id=@tid AND (phone=@phone OR lower(username)=@phone) ORDER BY (phone=@phone) DESC LIMIT 1",
-            ("tid", tid), ("phone", phone));
+        await using var cmd = TicketBatches.Command(conn, tx, "SELECT name,member_no,status,phone FROM plugin_kunlun_waterstation.members WHERE tenant_id=@tid AND id IS DISTINCT FROM @except::uuid AND (phone=@phone OR lower(username)=@phone) ORDER BY (phone=@phone) DESC LIMIT 1",
+            ("tid", tid), ("phone", phone), ("except", (object?)except ?? DBNull.Value));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         if (r.GetString(3) != phone) return "该手机号已被用作登录账号，请核对会员档案";
@@ -46,7 +46,7 @@ public static class FinanceEndpoints
 
             var name = req.Name?.Trim() ?? "";
             var phone = req.Phone?.Trim() ?? "";
-            if (string.IsNullOrEmpty(name) || !ValidPhone(phone))
+            if (name.Length is 0 or > 64 || !ValidPhone(phone))
                 return Results.BadRequest(new { error = "请填写有效姓名与 11 位手机号" });
             var remark = Remarks.Normalize(req.Remark, Remarks.MemberMaxLength);
 
@@ -82,7 +82,9 @@ public static class FinanceEndpoints
             return Results.Ok(new { id, memberNo, name, phone, remark, temporaryPassword });
         }).RequireAuthorization();
 
-        // 1b. 查询会员列表与搜索 (按卡号/姓名/手机号检索，可按状态、持有水票类型筛选并分页)
+        app.MapPut("/api/members/{id:guid}/contact", UpdateContact).RequireAuthorization();
+
+        // 会员地址簿可有多条命中，列表按会员分页，按默认地址优先列出所有命中项。
         app.MapGet("/api/members", async (
             string? q,
             string? status,
@@ -102,11 +104,21 @@ public static class FinanceEndpoints
             return await Paging.From(page, pageSize, legacyLimit: 50).Query(conn, $"""
                 m.id, m.member_no, m.name, m.phone, COALESCE(m.default_address, ''),
                 m.deposit_amount, m.held_buckets, m.held_bags, m.status, m.created_at, m.remark, {MemberTickets.JsonOf("m")},
-                m.disabled_at, m.disabled_by, m.disable_reason,m.card_opened_on
+                m.disabled_at, m.disabled_by, m.disable_reason,m.card_opened_on, matched.addresses
                 """, """
                 plugin_kunlun_waterstation.members m
+                LEFT JOIN LATERAL (
+                    SELECT json_agg(json_build_object('id', a.id, 'contactName', a.contact_name, 'contactPhone', a.contact_phone,
+                               'fullAddress', concat_ws(' ', a.location, NULLIF(a.door_no,'')))
+                               ORDER BY a.is_default DESC, a.updated_at DESC, a.id)::text AS addresses
+                    FROM plugin_kunlun_waterstation.member_addresses a
+                    WHERE @address IS NOT NULL AND a.tenant_id=m.tenant_id AND a.member_id=m.id
+                      AND (a.contact_name ILIKE @q OR a.contact_phone ILIKE @q
+                           OR regexp_replace(a.location || a.door_no, '[[:space:]]+', '', 'g') ILIKE @address)
+                ) matched ON true
                 WHERE m.tenant_id = @tid
-                  AND (@q IS NULL OR m.member_no ILIKE @q OR m.name ILIKE @q OR m.phone ILIKE @q)
+                  AND (@q IS NULL OR m.member_no ILIKE @q OR m.name ILIKE @q OR m.phone ILIKE @q
+                       OR matched.addresses IS NOT NULL OR m.default_address ILIKE @q)
                   AND (@status IS NULL OR m.status = @status)
                   AND (@water IS NULL OR EXISTS (
                        SELECT 1 FROM plugin_kunlun_waterstation.member_tickets t
@@ -116,6 +128,7 @@ public static class FinanceEndpoints
             {
                 p.AddWithValue("tid", finRepo.TenantId);
                 p.Add(Paging.Like("q", q));
+                p.Add(Paging.Like("address", q is null ? null : string.Concat(q.Where(c => !char.IsWhiteSpace(c)))));
                 p.Add(Paging.Text("status", status));
                 p.Add(Paging.Text("water", water));
             }, r => new
@@ -135,7 +148,8 @@ public static class FinanceEndpoints
                 disabledAt = r.IsDBNull(12) ? (DateTime?)null : r.GetDateTime(12),
                 disabledBy = r.IsDBNull(13) ? null : r.GetString(13),
                 disableReason = r.IsDBNull(14) ? null : r.GetString(14),
-                cardOpenedOn = r.IsDBNull(15) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(15)
+                cardOpenedOn = r.IsDBNull(15) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(15),
+                matchedAddresses = r.IsDBNull(16) ? Array.Empty<JsonElement>() : JsonSerializer.Deserialize<JsonElement[]>(r.GetString(16))
             }, ct);
         }).RequireAuthorization();
 
@@ -488,6 +502,51 @@ public static class FinanceEndpoints
         // The pool loses the whole deposit of these containers: what was paid back plus what was kept.
         await TicketBatches.Exec(conn, tx, "UPDATE plugin_kunlun_waterstation.members SET deposit_amount = GREATEST(0, deposit_amount - @amt) WHERE id = @mid", ct, ("amt", value), ("mid", mid));
         return new DepositRefundResult(refundNo, refundAmount, breakdown, value, deducted);
+    }
+
+    private static async Task<IResult> UpdateContact(Guid id, UpdateMemberContactRequest req, ClaimsPrincipal user,
+        NpgsqlDataSource ds, KunlunFinanceRepository repo, CancellationToken ct)
+    {
+        if (user.FindFirstValue("subject_type") != "STAFF" || !HasPerm(user, KunlunPermissions.MemberWrite)) return Results.Forbid();
+        var name = req.Name?.Trim() ?? "";
+        var phone = req.Phone?.Trim() ?? "";
+        if (name.Length is 0 or > 64 || !ValidPhone(phone))
+            return Results.BadRequest(new { error = "请填写 1–64 字的姓名和有效的 11 位手机号" });
+
+        var tid = repo.TenantId;
+        await using var conn = await ds.OpenConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        string oldName, oldPhone;
+        await using (var read = TicketBatches.Command(conn, tx,
+            "SELECT name,phone FROM plugin_kunlun_waterstation.members WHERE tenant_id=@tid AND id=@id FOR UPDATE", ("tid", tid), ("id", id)))
+        await using (var r = await read.ExecuteReaderAsync(ct))
+        {
+            if (!await r.ReadAsync(ct)) return Results.NotFound(new { error = "会员不存在" });
+            oldName = r.GetString(0);
+            oldPhone = r.GetString(1);
+        }
+        if (phone != oldPhone && await PhoneTaken(conn, tx, tid, phone, ct, id) is { } conflict)
+            return Results.Conflict(new { error = conflict });
+        try
+        {
+            await TicketBatches.Exec(conn, tx, """
+                UPDATE plugin_kunlun_waterstation.members SET name=@name, phone=@phone,
+                    username=CASE WHEN username=phone THEN @phone ELSE username END,
+                    token_version=token_version + CASE WHEN phone<>@phone THEN 1 ELSE 0 END
+                WHERE tenant_id=@tid AND id=@id
+                """, ct, ("tid", tid), ("id", id), ("name", name), ("phone", phone));
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return Results.Conflict(new { error = "该手机号已被其他会员使用" });
+        }
+        if (name != oldName || phone != oldPhone)
+            await TicketBatches.Exec(conn, tx, """
+                UPDATE plugin_kunlun_waterstation.member_addresses SET contact_name=@name, contact_phone=@phone, updated_at=now()
+                WHERE tenant_id=@tid AND member_id=@id AND contact_name=@oldName AND contact_phone=@oldPhone
+                """, ct, ("tid", tid), ("id", id), ("name", name), ("phone", phone), ("oldName", oldName), ("oldPhone", oldPhone));
+        await tx.CommitAsync(ct);
+        return Results.Ok(new { id, name, phone });
     }
 
     private static bool ValidPhone(string phone) => phone.Length == 11 && phone[0] == '1' && phone.All(char.IsAsciiDigit);

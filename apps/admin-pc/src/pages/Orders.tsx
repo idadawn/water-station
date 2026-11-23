@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  dateFilterFrom, isActiveOrder, orderStatusLabel, shortDateTime, unitOf, waterFallbackLabel,
+  dateFilterRange, isActiveOrder, orderStatusLabel, shortDateTime, unitOf, waterFallbackLabel,
   type DateFilter, type FulfillMode, type OrderQuery, type WaterOrder,
 } from '@kunlun/shared';
 import { ConfirmDialog, Dialog, Icon, useApi, useDialogs, useRun, useToast } from '@kunlun/ui';
@@ -32,11 +32,12 @@ export function Orders() {
   const [mode, setMode] = useState<FulfillMode | ''>('');
   const [date, setDate] = useState<DateFilter>('ALL');
   const q = useDebounced(query.trim());
+  const range = dateFilterRange(date);
   const tabFilter = TABS.find(([t]) => t === tab)![1];
   // 待接单 / 待自提 already fix the fulfil mode; combined with the other mode nothing can match.
   const conflict = !!(mode && tabFilter.mode && tabFilter.mode !== mode);
   const table = usePagedTable(page => conflict ? Promise.resolve(emptyPage<WaterOrder>())
-    : api.ordersPage({ ...tabFilter, mode: tabFilter.mode ?? (mode || undefined), q, from: dateFilterFrom(date), page, pageSize: PAGE_SIZE }), [tab, mode, q, date]);
+    : api.ordersPage({ ...tabFilter, mode: tabFilter.mode ?? (mode || undefined), q, ...range, page, pageSize: PAGE_SIZE }), [tab, mode, q, range]);
   const rows = table.data?.rows ?? [];
 
   const pendingDelivery = overview?.pendingDelivery ?? orders.filter(o => o.status === 'PENDING' && o.fulfillMode === 'DELIVERY').length;
@@ -54,7 +55,7 @@ export function Orders() {
     <div className="page-head">
       <div><h2>水单管理</h2><p>下单预占水票与地址快照，交付时按水品同步登记领出的满桶（袋）和收回的空桶（袋）</p></div>
       <div className="head-actions">
-        <button type="button" className="btn" onClick={() => exportCsv('orders')}><Icon name="export" />导出汇总</button>
+        <button type="button" className="btn" onClick={() => exportCsv('orders', range)}><Icon name="export" />导出汇总</button>
         <button type="button" className="btn primary" onClick={() => ops.order()}><Icon name="plus" />门店点单</button>
       </div>
     </div>

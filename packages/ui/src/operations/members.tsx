@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { PHONE_PATTERN } from '@kunlun/shared';
+import { PHONE_PATTERN, type MemberProfile } from '@kunlun/shared';
 import { useApi } from '../auth';
 import { Dialog, Field, FormDialog, useDialogs, useToast } from '../feedback';
 import type { Done } from './common';
@@ -20,6 +20,25 @@ export function ResetMemberPasswordDialog({ member, onClose }: { member: { id: s
     const result = await api.resetMemberPassword(member.id);
     await dialogs.open(close => <TemporaryPasswordDialog name={member.name} phone={result.phone} password={result.temporaryPassword} onClose={close} />);
   }}><p>重置后，会员须用手机号和新的临时密码重新登录，再设置自己的密码。</p></FormDialog>;
+}
+
+export function EditMemberContactDialog({ member, onClose, onDone }: {
+  member: Pick<MemberProfile, 'id' | 'memberNo' | 'name' | 'phone'>; onClose: () => void; onDone: Done;
+}) {
+  const api = useApi();
+  const toast = useToast();
+  const [name, setName] = useState(member.name);
+  const [phone, setPhone] = useState(member.phone);
+  const submit = async () => {
+    await api.updateMemberContact(member.id, name.trim(), phone.trim());
+    await onDone();
+    toast('会员资料已保存');
+  };
+  return <FormDialog title="编辑会员资料" description={member.memberNo} onClose={onClose} onSubmit={submit}>
+    <Field label="会员姓名" htmlFor="editMemberName"><input id="editMemberName" className="input" required maxLength={64} value={name} onChange={e => setName(e.target.value)} /></Field>
+    <Field label="联系电话" htmlFor="editMemberPhone"><input id="editMemberPhone" className="input" type="tel" inputMode="numeric" required pattern={PHONE_PATTERN} maxLength={11} value={phone} onChange={e => setPhone(e.target.value)} /></Field>
+    <p className="membership-note">每个手机号只能用于一位会员。使用原手机号登录的会员，改号后请用新号码和原密码登录。地址簿中与原姓名、电话均相同的收货联系人也会同步更新。</p>
+  </FormDialog>;
 }
 
 /** 新建会员档案；填写收货地址时同时建立首个默认地址，联系人默认为会员本人。 */

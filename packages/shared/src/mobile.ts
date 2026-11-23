@@ -62,7 +62,7 @@ export const MOBILE_FEATURES: readonly MobileFeature[] = [
   },
   {
     key: 'members', label: '会员查询', tab: '会员', icon: 'users', tone: '', group: '会员与收款', page: 'members',
-    summary: '按姓名、手机号或会员编号查会员，看水票、押金、手里的桶袋和收货地址',
+    summary: '按姓名、手机号、会员编号或地址查会员，看水票、押金、手里的桶袋和收货地址',
     permissions: [P.MemberRead],
   },
   {

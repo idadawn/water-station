@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import {
-  EXPENSE_CATEGORIES, KUNLUN_PERMISSIONS as P, containerLabel, containerUnit, dateFilterFrom, expenseCategoryLabel, money, payMethodLabel, shortDateTime, stationDay,
+  EXPENSE_CATEGORIES, KUNLUN_PERMISSIONS as P, containerLabel, containerUnit, dateFilterRange, expenseCategoryLabel, money, payMethodLabel, shortDateTime, stationDay,
   type ContainerType, type DateFilter, type Expense, type ExpenseCategory, type ExpenseQuery, type ExpenseStatus, type PayMethod,
 } from '@kunlun/shared';
 import { Field, FormDialog, Icon, PayButtons, ReasonChips, Stepper, useAuth, useDialogs, useIdempotencyKey, useLoader, useRun, useToast } from '@kunlun/ui';
-import { DateFilterSelect, EmptyRow, Pager, StatCard, emptyPage, ledgerEmptyText, useDebounced, useExport, useGo, usePagedTable, PAGE_SIZE } from '../common';
+import { DATE_PRESETS, DateFilterSelect, EmptyRow, Pager, StatCard, emptyPage, ledgerEmptyText, useDebounced, useExport, useGo, usePagedTable, PAGE_SIZE } from '../common';
 import { useAdminData } from '../data';
 
-const PERIOD_TEXT: Record<DateFilter, string> = { ALL: '全部时间', TODAY: '今天', WEEK: '近 7 天', MONTH: '本月' };
 
 /**
  * 费用支出：买桶袋、配件耗材、维修和其他杂费一笔一条，和水费、押金分开记。上面四个数跟着所选时间走：
@@ -27,14 +26,14 @@ export function Expenses() {
   const [category, setCategory] = useState<ExpenseCategory | ''>('');
   const [status, setStatus] = useState<ExpenseStatus | ''>('');
   const q = useDebounced(query.trim());
-  const from = dateFilterFrom(date);
-  const filter: ExpenseQuery = { q, from, category: category || undefined, status: status || undefined };
+  const range = dateFilterRange(date);
+  const filter: ExpenseQuery = { q, ...range, category: category || undefined, status: status || undefined };
   const filtered = !!(q || category || status);
-  const summary = useLoader(() => readable ? api.expenseSummary({ from }) : Promise.resolve(null), [api, readable, from, version]);
+  const summary = useLoader(() => readable ? api.expenseSummary(range) : Promise.resolve(null), [api, readable, range.from, range.to, version]);
   const table = usePagedTable(page => readable ? api.expenses({ ...filter, page, pageSize: PAGE_SIZE }) : Promise.resolve(emptyPage<Expense>()), [filter, readable]);
   const rows = table.data?.rows ?? [];
   const s = summary.data;
-  const period = PERIOD_TEXT[date];
+  const period = typeof date === 'string' ? DATE_PRESETS[date] : date.start === date.end ? date.start : `${date.start} 至 ${date.end}`;
   const byCategory = (value: ExpenseCategory) => s?.categories.find(c => c.category === value)?.total ?? 0;
   const record = run(() => dialogs.open(close => <ExpenseDialog onClose={close} onDone={refresh} />));
 
@@ -68,7 +67,7 @@ export function Expenses() {
       </select>
       <DateFilterSelect label="购买日期" value={date} onChange={setDate} />
       <div className="filter-spacer" />
-      {can(P.ReportExport) && <button type="button" className="btn" onClick={() => exportCsv('expenses')}><Icon name="export" />导出支出明细</button>}
+      {can(P.ReportExport) && <button type="button" className="btn" onClick={() => exportCsv('expenses', range)}><Icon name="export" />导出支出明细</button>}
     </div>
     <div className="table-card ledger-table">
       <div style={{ overflowX: 'auto' }}>
