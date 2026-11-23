@@ -103,21 +103,24 @@ public static class ContainerInventory
     {
         app.MapPost("/api/containers/inventory", Execute).RequireAuthorization();
         app.MapPost("/api/containers/stock", UpdateStock).RequireAuthorization();
-        app.MapGet("/api/containers/inventory-operations", async (string? containerType, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) =>
+        app.MapGet("/api/containers/inventory-operations", async (string? containerType, DateTimeOffset? from, DateTimeOffset? to,
+            int? page, int? pageSize, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) =>
         {
             if (!Authorized(user)) return Results.Forbid();
             if (containerType is not null && !ProductContainers.ValidId(containerType)) throw new BusinessRuleException("容器类型无效");
             await using var conn = await db.OpenConnectionAsync(ct);
-            await using var cmd = Command(conn, null, """
-                SELECT o.receipt::text,COALESCE(m.name,'')
-                FROM plugin_kunlun_waterstation.container_inventory_operations o
+            return await Paging.From(page, pageSize, legacyLimit: 100).Query(conn, "o.receipt::text,COALESCE(m.name,'')", """
+                plugin_kunlun_waterstation.container_inventory_operations o
                 LEFT JOIN plugin_kunlun_waterstation.members m ON m.id=o.member_id AND m.tenant_id=o.tenant_id
-                WHERE o.tenant_id=@tid AND o.action IN ('RECEIVE','SCRAP','COUNT','ADJUST') AND (@type='' OR o.container_type=@type)
-                ORDER BY o.created_at DESC,o.id DESC LIMIT 100
-                """, ("tid", repo.DefaultTenantId), ("type", containerType ?? ""));
-            var rows = new List<object>(); await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) rows.Add(new { operation = JsonSerializer.Deserialize<JsonElement>(r.GetString(0)), memberName = r.GetString(1) });
-            return Results.Ok(rows);
+                WHERE o.tenant_id=@tid AND o.action IN ('RECEIVE','SCRAP','COUNT','ADJUST') AND (@type IS NULL OR o.container_type=@type)
+                  AND (@from IS NULL OR o.created_at >= @from) AND (@to IS NULL OR o.created_at < @to)
+                """, "o.created_at DESC,o.id DESC", p =>
+            {
+                p.AddWithValue("tid", repo.DefaultTenantId);
+                p.Add(Paging.Text("type", containerType));
+                p.Add(Paging.Time("from", from));
+                p.Add(Paging.Time("to", to));
+            }, r => new { operation = JsonSerializer.Deserialize<JsonElement>(r.GetString(0)), memberName = r.GetString(1) }, ct);
         }).RequireAuthorization();
     }
 

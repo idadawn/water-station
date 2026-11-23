@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PAY_METHODS, type MemberProfile, type PayMethod, type ReviewSettings } from '@kunlun/shared';
+import { PAY_METHODS, deliveryContactLabel, type MemberProfile, type PayMethod, type ReviewSettings } from '@kunlun/shared';
 import { useApi } from '../auth';
 import { Dialog } from '../feedback';
 
@@ -60,10 +60,10 @@ export function UnavailableDialog({ title, message, onClose }: { title: string; 
 }
 
 /** What a member picker needs to show a choice; search results carry the full profile. */
-export type PickerMember = Pick<MemberProfile, 'id' | 'name' | 'memberNo'> & { phone?: string };
+export type PickerMember = Pick<MemberProfile, 'id' | 'name' | 'memberNo' | 'matchedAddresses'> & { phone?: string };
 
 const PICKER_RESULTS = 20;
-const memberLabel = (m: PickerMember) => [m.name, m.memberNo, m.phone].filter(Boolean).join(' · ');
+const memberLabel = (m: PickerMember) => [m.name, m.memberNo, m.phone, ...(m.matchedAddresses ?? []).map(deliveryContactLabel)].filter(Boolean).join(' · ');
 
 /**
  * The member a staff dialog acts on. A preselected `memberId` is loaded from the server, so it need not be in any
@@ -83,7 +83,7 @@ export function usePickedMember(memberId?: string) {
 }
 
 /**
- * Server-searched member choice: matches on name, phone or member number, newest first. The chosen member stays
+ * Server-searched member choice: matches on name, phone, member number or delivery address, newest first. The chosen member stays
  * selected while later searches show other members; a search with a single match selects it.
  */
 export function MemberPicker({ id, value, onChange, disabled }: { id: string; value: PickerMember | null; onChange: (member: MemberProfile) => void; disabled?: boolean }) {
@@ -114,11 +114,11 @@ export function MemberPicker({ id, value, onChange, disabled }: { id: string; va
   const options: PickerMember[] = value && !rows.some(m => m.id === value.id) ? [value, ...rows] : rows;
   const hint = error || (!result ? '正在加载会员…'
     : result.total === 0 ? (result.q ? `没有找到「${result.q}」，请换个关键字（已停用的会员不列出）` : '暂无会员，请先建立会员档案')
-    : result.total > rows.length ? `共 ${result.total} 位${result.q ? '匹配' : '会员'}，显示最近 ${rows.length} 位；输入姓名、手机号或会员编号缩小范围`
+    : result.total > rows.length ? `共 ${result.total} 位${result.q ? '匹配' : '会员'}，显示最近 ${rows.length} 位；输入姓名、手机号、会员编号或地址缩小范围`
     : result.q ? `找到 ${result.total} 位会员` : '');
   return (
     <div className="member-picker">
-      <input className="input" type="search" aria-label="搜索会员" placeholder="搜索姓名、手机号或会员编号" value={query} disabled={disabled}
+      <input className="input" type="search" aria-label="搜索会员" placeholder="搜索姓名、手机号、会员编号或地址" value={query} disabled={disabled}
         onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
       <select id={id} className="select" required disabled={disabled} value={value?.id ?? ''}
         onChange={e => { const m = rows.find(r => r.id === e.target.value); if (m) onChange(m); }}>

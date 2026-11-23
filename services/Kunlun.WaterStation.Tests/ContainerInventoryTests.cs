@@ -37,6 +37,17 @@ public sealed class ContainerInventoryTests(TestHost host)
         Assert.Equal(["containerType","unitDeposit","totalQty","inStationQty","withCustomersQty","memberHeldQty","damagedQty","scrappedQty","warnThreshold","countedAt","identityValid","lowStockWarning"],before.EnumerateObject().Select(p=>p.Name));
         foreach(var action in new[]{"DAMAGE","REPAIR","COUNT","ADJUST"})
             Assert.Equal(HttpStatusCode.BadRequest,(await c.PostAsJsonAsync("/api/containers/inventory",new InventoryRequest("BAG",action,"旧库存维护不可再提交",Key(),1))).StatusCode);
+        var operationNo = received.GetProperty("operationNo").GetString()!;
+        var upper = DateTimeOffset.UtcNow.AddMinutes(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var lower = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var page = await c.GetFromJsonAsync<JsonElement>($"/api/containers/inventory-operations?from={lower}&to={upper}&page=1&containerType=BAG");
+        Assert.Contains(page.GetProperty("rows").EnumerateArray(), row => row.GetProperty("operation").GetProperty("operationNo").GetString() == operationNo);
+        foreach (var endpoint in new[] { "inventory-operations", "circulation", "damages" })
+        {
+            var past = await c.GetFromJsonAsync<JsonElement>($"/api/containers/{endpoint}?page=1&to=2000-01-01T00:00:00Z");
+            Assert.Equal(0, past.GetProperty("total").GetInt64());
+        }
+        Assert.DoesNotContain(operationNo, await c.GetStringAsync("/api/exports/inventory-operations?to=2000-01-01T00:00:00Z"));
         var csv=await c.GetStringAsync("/api/exports/inventory-operations");Assert.Contains(",新购,",csv);Assert.Contains(",报废,",csv);
     }
 

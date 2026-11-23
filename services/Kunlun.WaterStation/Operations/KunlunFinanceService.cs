@@ -4,6 +4,7 @@ using Npgsql;
 
 namespace Kunlun.WaterStation.Operations;
 
+public sealed record UpdateMemberContactRequest(string Name, string Phone);
 public sealed record CreateMemberRequest(string Name, string Phone, string? DefaultAddress, string? Remark, string? DoorNo = null);
 public sealed record SaveRechargePlanRequest(
     string Name,

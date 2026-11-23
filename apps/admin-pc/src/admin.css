@@ -112,6 +112,10 @@
 .filter-card{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .field-search{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);padding:0 12px;height:38px;min-width:260px;color:var(--muted)}
 .field-search input{border:0;outline:0;background:none;width:100%;color:var(--text);font-size:13px}
+.date-range-fields{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--muted)}
+.date-range-fields input.input{width:9.5rem;min-width:0;height:38px}
+.period-picker + .date-range-fields{display:flex;margin-top:8px}
+.stock-history-toolbar{flex-wrap:wrap;gap:10px}
 .filter-card .select{width:auto;height:38px;padding:0 28px 0 12px}
 .filter-spacer{flex:1}
 .table-card{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)}

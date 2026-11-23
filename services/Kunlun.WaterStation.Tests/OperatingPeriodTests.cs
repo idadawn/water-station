@@ -61,6 +61,14 @@ public sealed class OperatingPeriodTests(TestHost host)
             return await r.Content.ReadFromJsonAsync<JsonElement>();
         }
 
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.GetAsync(url + "custom&start=2024-01-02")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.GetAsync(url + "custom&start=2024-01-02&end=2024-01-01")).StatusCode);
+        var monthly = await Report("custom&start=2022-12-19&end=2024-01-03");
+        var months = monthly.GetProperty("activity").GetProperty("trend").EnumerateArray().ToList();
+        Assert.Equal(14, months.Count);
+        Assert.Equal("2022-12", months[0].GetProperty("label").GetString());
+        Assert.Equal("2024-01", months[^1].GetProperty("label").GetString());
+
         var before = await Report("today");
         var previous = await Report("last-week");
         var member = await Post("/api/members", new CreateMemberRequest("经营统计", $"133{Random.Shared.Next(10000000, 99999999)}", "测试地址", null, "101"));
@@ -87,6 +95,13 @@ public sealed class OperatingPeriodTests(TestHost host)
         Assert.Equal(Cash(previous, "balance") - 19.75m, Cash(lastWeek, "balance"));
         Assert.Equal(Sum(previous, "buckets"), Sum(lastWeek, "buckets"));
         Assert.Equal(7, lastWeek.GetProperty("activity").GetProperty("trend").GetArrayLength());
+        var first = lastWeek.GetProperty("start").GetString();
+        var last = lastWeek.GetProperty("end").GetString();
+        var custom = await Report($"custom&start={first}&end={last}");
+        Assert.True(JsonElement.DeepEquals(lastWeek, custom));
+        var single = await Report($"custom&start={last}&end={last}");
+        Assert.Equal("hour", single.GetProperty("grain").GetString());
+        Assert.Equal(24, single.GetProperty("activity").GetProperty("trend").GetArrayLength());
         var lastYear = await Report("last-year");
         Assert.Equal(12, lastYear.GetProperty("activity").GetProperty("trend").GetArrayLength());
     }

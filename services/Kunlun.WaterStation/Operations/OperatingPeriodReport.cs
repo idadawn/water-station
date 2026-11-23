@@ -12,7 +12,7 @@ internal static class OperatingPeriodReport
 
     internal sealed record Window(DateOnly Start, DateOnly End, string Grain);
 
-    internal static Window Resolve(string period, DateTimeOffset now)
+    internal static Window Resolve(string period, DateTimeOffset now, DateOnly? start = null, DateOnly? end = null)
     {
         var today = DateOnly.FromDateTime(now.ToOffset(StationOffset).DateTime);
         var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
@@ -20,6 +20,9 @@ internal static class OperatingPeriodReport
         var year = new DateOnly(today.Year, 1, 1);
         return period switch
         {
+            "custom" when start is { } first && end is { } last && first > DateOnly.MinValue && last < DateOnly.MaxValue && first <= last =>
+                new(first, last, first == last ? "hour" : last.DayNumber - first.DayNumber < 62 ? "day" : "month"),
+            "custom" => throw new BusinessRuleException("请选择有效的开始和结束日期，开始日期不能晚于结束日期"),
             "today" => new(today, today, "hour"),
             "week" => new(monday, today, "day"),
             "last-week" => new(monday.AddDays(-7), monday.AddDays(-1), "day"),
@@ -31,11 +34,11 @@ internal static class OperatingPeriodReport
         };
     }
 
-    public static async Task<IResult> Get(string period, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct)
+    public static async Task<IResult> Get(string period, DateOnly? start, DateOnly? end, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct)
     {
         if (!Expenses.CanRead(user)) return Results.Forbid();
         var now = DateTimeOffset.UtcNow;
-        var window = Resolve(period, now);
+        var window = Resolve(period, now, start, end);
         var from = new DateTimeOffset(window.Start.ToDateTime(TimeOnly.MinValue), StationOffset).ToUniversalTime();
         var until = new DateTimeOffset(window.End.AddDays(1).ToDateTime(TimeOnly.MinValue), StationOffset).ToUniversalTime();
 
@@ -59,7 +62,7 @@ internal static class OperatingPeriodReport
         // Group at the station before joining the streams. Empty hours, days and months still have a point.
         await using var cmd = Command(conn, tx, """
             WITH slots AS (
-              SELECT generate_series(@from AT TIME ZONE 'Asia/Shanghai',
+              SELECT generate_series(date_trunc(@grain, @from AT TIME ZONE 'Asia/Shanghai'),
                 date_trunc(@grain, LEAST(@now, @until - interval '1 microsecond') AT TIME ZONE 'Asia/Shanghai'),
                 ('1 ' || @grain)::interval) AS slot
             ), charges AS (
@@ -87,11 +90,12 @@ internal static class OperatingPeriodReport
               CROSS JOIN LATERAL (SELECT COALESCE(card_opened_on::timestamp AT TIME ZONE 'Asia/Shanghai',created_at) AS opened) dates
               WHERE tenant_id=@tid AND opened >= @from AND opened < @until GROUP BY 1
             )
-            SELECT to_char(slot, CASE @grain WHEN 'hour' THEN 'HH24:00' WHEN 'month' THEN 'FMMM"月"' ELSE 'MM/DD' END),
+            SELECT to_char(slot, CASE @grain WHEN 'hour' THEN 'HH24:00' WHEN 'month' THEN CASE WHEN @crossYear THEN 'YYYY-MM' ELSE 'FMMM"月"' END ELSE 'MM/DD' END),
                    COALESCE(receipts,0), COALESCE(buckets,0), COALESCE(bags,0), COALESCE(deliveries,0), COALESCE(pickups,0), COALESCE(joined,0), COALESCE(redemption_value,0)
             FROM slots LEFT JOIN charges USING(slot) LEFT JOIN fulfilled USING(slot) LEFT JOIN members USING(slot)
             LEFT JOIN redemptions USING(slot) ORDER BY slot
-            """, ("tid", tid), ("from", from), ("until", until), ("now", now), ("grain", grain));
+            """, ("tid", tid), ("from", from), ("until", until), ("now", now), ("grain", grain),
+            ("crossYear", from.ToOffset(StationOffset).Year != until.AddTicks(-1).ToOffset(StationOffset).Year));
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var points = new List<Point>();
         decimal redeemedValue = 0;

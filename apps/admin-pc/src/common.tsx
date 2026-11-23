@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  KUNLUN_PERMISSIONS as P, pageCount, pageWindow, pathFor, stationDay,
-  type DateFilter, type ExportDataset, type LedgerQuery, type MemberProfile, type Paged, type WaterOrder, type WaterProduct,
+  KUNLUN_PERMISSIONS as P, pageCount, pageWindow, pathFor, stationDay, todayRange,
+  type CalendarRange, type DateFilter, type DatePreset, type ExportDataset, type LedgerQuery, type MemberProfile, type Paged, type TimeRange, type WaterOrder, type WaterProduct,
 } from '@kunlun/shared';
 import {
-  CounterOrder, DepositDialog, Dialog, FulfillDialog, MemberAssetsDialog, MovementDialog, NewMemberDialog, RechargeDialog,
+  CounterOrder, DepositDialog, Dialog, EditMemberContactDialog, FulfillDialog, MemberAssetsDialog, MovementDialog, NewMemberDialog, RechargeDialog,
   Icon, saveBlob, useApi, useAuth, useDialogs, useLoader, useRun, useToast, type DepositAction, type IconName,
 } from '@kunlun/ui';
 import { useAdminData } from './data';
@@ -24,8 +24,8 @@ export function useExport() {
   const api = useApi();
   const toast = useToast();
   const run = useRun();
-  return (dataset: ExportDataset) => run(async () => {
-    saveBlob(await api.exportCsv(dataset), `绿麒麟水站_导出_${stationDay()}.csv`);
+  return (dataset: ExportDataset, range?: TimeRange) => run(async () => {
+    saveBlob(await api.exportCsv(dataset, range), `绿麒麟水站_导出_${stationDay()}.csv`);
     toast('报表已导出');
   })();
 }
@@ -48,6 +48,8 @@ export function useOperations() {
     movement: (id = memberId) => run(() => dialogs.open(close => <MovementDialog memberId={id} onClose={close} onDone={refresh} />))(),
     fulfill: (order?: WaterOrder) => run(() => dialogs.open(close => <FulfillDialog order={order} onClose={close} onDone={refresh} />))(),
     assets: (member: Pick<MemberProfile, 'id' | 'name' | 'status'>) => run(() => dialogs.open(close => <MemberAssetsDialog memberId={member.id} memberName={member.name} readOnly={member.status === 'DISABLED'} onClose={close} onDone={refresh} />))(),
+    editMember: (member: Pick<MemberProfile, 'id' | 'memberNo' | 'name' | 'phone'>) =>
+      run(() => dialogs.open(close => <EditMemberContactDialog member={member} onClose={close} onDone={refresh} />))(),
     newMember: () => run(async () => {
       const created = await dialogs.open<{ id: string }>(close => <NewMemberDialog onClose={close} onDone={refresh} />);
       if (created) data.setSelectedMemberId(created.id);
@@ -68,14 +70,36 @@ function CounterOrderDialog({ products, memberId: initial, onClose, onDone }: { 
   );
 }
 
-export const DATE_FILTERS: Array<[DateFilter, string]> = [['ALL', '全部时间'], ['TODAY', '今天'], ['WEEK', '近 7 天'], ['MONTH', '本月']];
+export const DATE_PRESETS: Record<DatePreset, string> = { ALL: '全部时间', TODAY: '今天', WEEK: '近 7 天', MONTH: '本月' };
+
+export function DateRangeFields({ value, onChange }: { value: CalendarRange; onChange: (range: CalendarRange) => void }) {
+  const [error, setError] = useState('');
+  return <form className="date-range-fields" onInput={() => setError('')} onSubmit={e => {
+    e.preventDefault();
+    const fields = new FormData(e.currentTarget);
+    const start = String(fields.get('start'));
+    const end = String(fields.get('end'));
+    if (start > end) { setError('结束日期不能早于开始日期'); return; }
+    setError('');
+    onChange({ start, end });
+  }}>
+    <input className="input" type="date" name="start" aria-label="开始日期" required min="0001-01-02" max="9999-12-30" defaultValue={value.start} />
+    <span>至</span>
+    <input className="input" type="date" name="end" aria-label="结束日期" required min="0001-01-02" max="9999-12-30" defaultValue={value.end} />
+    <button type="submit" className="btn sm">查询时段</button>
+    {error && <span className="account-error" role="alert">{error}</span>}
+  </form>;
+}
 
 export function DateFilterSelect({ value, onChange, label }: { value: DateFilter; onChange: (value: DateFilter) => void; label: string }) {
-  return (
-    <select className="select" aria-label={label} value={value} onChange={e => onChange(e.target.value as DateFilter)}>
-      {DATE_FILTERS.map(([id, text]) => <option key={id} value={id}>{text}</option>)}
+  return <>
+    <select className="select" aria-label={label} value={typeof value === 'string' ? value : 'CUSTOM'}
+      onChange={e => onChange(e.target.value === 'CUSTOM' ? todayRange() : e.target.value as DatePreset)}>
+      {Object.entries(DATE_PRESETS).map(([id, text]) => <option key={id} value={id}>{text}</option>)}
+      <option value="CUSTOM">自定义</option>
     </select>
-  );
+    {typeof value === 'object' && <DateRangeFields value={value} onChange={onChange} />}
+  </>;
 }
 
 /** `value` once it has stopped changing for `delay` ms, so search boxes do not query on every keystroke. */

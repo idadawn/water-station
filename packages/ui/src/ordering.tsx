@@ -3,7 +3,7 @@ import {
   KUNLUN_BRAND, KUNLUN_PERMISSIONS as P, PAY_METHODS, containerKind, containerUnit, modeLabel, money, payMethodLabel, ticketSummary, ticketsFor, unitOf,
   type DepositSummaryRow, type ContainerType, type CreateOrderResult, type FulfillMode, type MemberProfile, type PayMethod, type WaterProduct, type WaterType,
 } from '@kunlun/shared';
-import { AddressPicker } from './addresses';
+import { AddressPicker, MatchedDeliveryContacts } from './addresses';
 import { useApi, useAuth } from './auth';
 import { FormDialog, NumberInput, useDialogs, useRun } from './feedback';
 import { newRequestKey, useLoader } from './hooks';
@@ -671,25 +671,31 @@ function CustomerSearch({ onPick, onNewMember }: { onPick: (memberId: string) =>
   const api = useApi();
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
-  useEffect(() => { const t = window.setTimeout(() => setDebounced(query.trim()), 200); return () => window.clearTimeout(t); }, [query]);
-  const members = useLoader(() => api.listMembers(debounced), [api, debounced]);
+  const [page, setPage] = useState(1);
+  useEffect(() => { const t = window.setTimeout(() => { setDebounced(query.trim()); setPage(1); }, 200); return () => window.clearTimeout(t); }, [query]);
+  const members = useLoader(() => api.membersPage({ q: debounced, status: 'ACTIVE', page, pageSize: 8 }), [api, debounced, page]);
   const run = useRun();
   const create = run(async () => { const id = await onNewMember?.(); if (id) onPick(id); });
   return (
     <div className="counter-search">
       <label className="counter-search-box"><Icon name="search" />
-        <input autoFocus inputMode="search" placeholder="顾客手机号、姓名或会员号" aria-label="查找顾客" value={query} onChange={e => setQuery(e.target.value)} />
+        <input autoFocus inputMode="search" placeholder="顾客姓名、手机号、会员号或地址" aria-label="查找顾客" value={query} onChange={e => setQuery(e.target.value)} />
       </label>
       {members.error ? <p className="account-error" role="alert">{members.error}</p>
         : !members.data ? <p className="membership-note">正在查找…</p>
-        : members.data.length === 0 ? <p className="membership-note">没有找到顾客{onNewMember ? '，可新建会员后点单' : ''}</p>
-        : members.data.slice(0, 8).map(m => (
+        : members.data.rows.length === 0 ? <p className="membership-note">没有找到顾客{onNewMember ? '，可新建会员后点单' : ''}</p>
+        : members.data.rows.map(m => (
           <button key={m.id} type="button" className="counter-customer pick" onClick={() => onPick(m.id)}>
             <span className="counter-avatar">{m.name[0]}</span>
-            <span><b>{m.name}</b><small>{m.phone} · {ticketSummary(m.tickets)}</small></span>
+            <span><b>{m.name}</b><small>{m.phone} · {ticketSummary(m.tickets)}</small><MatchedDeliveryContacts addresses={m.matchedAddresses} /></span>
             <Icon name="chevron" />
           </button>
         ))}
+      {members.data && members.data.total > 8 && <div className="head-actions">
+        <button type="button" className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
+        <span>{page} / {Math.ceil(members.data.total / 8)}</span>
+        <button type="button" className="btn sm" disabled={page * 8 >= members.data.total} onClick={() => setPage(page + 1)}>下一页</button>
+      </div>}
       {onNewMember && <button type="button" className="btn sm" onClick={create}><Icon name="plus" size="sm" />新建会员</button>}
     </div>
   );

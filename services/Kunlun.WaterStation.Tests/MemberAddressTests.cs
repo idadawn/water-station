@@ -41,6 +41,69 @@ public sealed class MemberAddressTests(TestHost host)
         c.PostAsJsonAsync("/api/orders", new CreateWaterOrderRequest(member, "BUCKET_18_9L", "DELIVERY", 1, Key(), addressId));
 
     [Fact]
+    public async Task Search_matches_secondary_addresses_without_duplicating_members()
+    {
+        using var c = await Staff();
+        var area = $"锦绣花园{Key()[..8]}";
+        var (first, _) = await Member(c);
+        var (second, _) = await Member(c, area, "9栋");
+        var contact = $"收货人{Key()[..6]}";
+        var phone = Phone();
+        await Add(c, first, area, "1 栋 301", name: contact, phone: phone);
+        await Add(c, first, area, "2 栋 102", name: contact, phone: phone);
+        async Task<JsonElement> Search(string query) =>
+            await c.GetFromJsonAsync<JsonElement>($"/api/members?pageSize=1&q={Uri.EscapeDataString(query)}");
+        Assert.Equal(2, (await Search(area)).GetProperty("total").GetInt32());
+        var row = Assert.Single((await Search(area + "1栋301")).GetProperty("rows").EnumerateArray());
+        Assert.Equal(first, row.GetProperty("id").GetGuid());
+        var match = Assert.Single(row.GetProperty("matchedAddresses").EnumerateArray());
+        Assert.Equal(area + " 1 栋 301", match.GetProperty("fullAddress").GetString());
+        Assert.NotEqual(match.GetProperty("fullAddress").GetString(), row.GetProperty("defaultAddress").GetString());
+        foreach (var query in new[] { contact, phone })
+        {
+            var result = await Search(query);
+            Assert.Equal(1, result.GetProperty("total").GetInt32());
+            var matches = Assert.Single(result.GetProperty("rows").EnumerateArray()).GetProperty("matchedAddresses").EnumerateArray().ToList();
+            Assert.Equal(2, matches.Count);
+            Assert.All(matches, a => Assert.Equal(phone, a.GetProperty("contactPhone").GetString()));
+        }
+        Assert.Equal(second, Assert.Single((await Search(area + "9栋")).GetProperty("rows").EnumerateArray()).GetProperty("id").GetGuid());
+    }
+
+    [Fact]
+    public async Task Editing_contact_keeps_phones_unique_and_updates_only_the_members_own_delivery_contacts()
+    {
+        using var c = await Staff();
+        var (first, oldPhone) = await Member(c);
+        var (second, otherPhone) = await Member(c);
+        await Add(c, first, "公司", "前台", phone: oldPhone);
+        var url = $"/api/members/{first}/contact";
+        using var reader = await Staff("YG0008");
+        var edit = new UpdateMemberContactRequest("王女士", Phone());
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PutAsJsonAsync(url, edit)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.PutAsJsonAsync(url, edit with { Phone = "123" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PutAsJsonAsync(url, edit with { Phone = otherPhone })).StatusCode);
+        await Ok(await c.PutAsJsonAsync(url, edit with { Phone = oldPhone }));
+        await Ok(await c.PutAsJsonAsync(url, edit));
+        var addresses = await List(c, first);
+        Assert.Contains(addresses, a => a.GetProperty("contactName").GetString() == edit.Name && a.GetProperty("contactPhone").GetString() == edit.Phone);
+        Assert.Contains(addresses, a => a.GetProperty("contactName").GetString() == "李四" && a.GetProperty("contactPhone").GetString() == oldPhone);
+        var reset = await Ok(await c.PostAsync($"/api/members/{second}/reset-password", null));
+        var next = Phone();
+        var competing = await Task.WhenAll(c.PutAsJsonAsync(url, edit with { Phone = next }),
+            c.PutAsJsonAsync($"/api/members/{second}/contact", new UpdateMemberContactRequest("王先生", next)));
+        Assert.Single(competing, r => r.IsSuccessStatusCode);
+        Assert.Single(competing, r => r.StatusCode == HttpStatusCode.Conflict);
+        var secondPhone = competing[1].IsSuccessStatusCode ? next : otherPhone;
+        using var member = host.CreateClient();
+        await TestHost.CompleteFirstLogin(member, secondPhone, reset.GetProperty("temporaryPassword").GetString()!, TestHost.Password);
+        var corrected = Phone();
+        await Ok(await c.PutAsJsonAsync($"/api/members/{second}/contact", new UpdateMemberContactRequest("王先生", corrected)));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await member.PostAsJsonAsync("/api/auth/member/login", new StaffLoginRequest(secondPhone, TestHost.Password))).StatusCode);
+        await Ok(await member.PostAsJsonAsync("/api/auth/member/login", new StaffLoginRequest(corrected, TestHost.Password)));
+    }
+
+    [Fact]
     public async Task New_Member_Address_Defaults_Contact_To_Member_And_Fills_Default_Text()
     {
         using var c = await Staff(); var (id, phone) = await Member(c);

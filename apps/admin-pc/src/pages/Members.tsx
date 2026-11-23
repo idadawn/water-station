@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { KUNLUN_PERMISSIONS as P, money, pageCount, ticketGroups, type MemberTicket } from '@kunlun/shared';
-import { Icon, ResetMemberPasswordDialog, useDialogs, useAuth } from '@kunlun/ui';
+import { Icon, MatchedDeliveryContacts, ResetMemberPasswordDialog, useDialogs, useAuth } from '@kunlun/ui';
 import { EmptyRow, Pager, useExport, useOperations } from '../common';
 import { MEMBER_PAGE_SIZE, useAdminData, type MemberFilter } from '../data';
 import { useMemberStatusActions } from '../memberStatus';
@@ -78,7 +78,7 @@ function MemberList({ onOpen }: { onOpen: (id: string) => void }) {
       <div className="summary-item"><small>持有容器会员</small><b>{overview?.membersWithContainers ?? withContainers}</b></div>
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索姓名、手机号或会员编号" aria-label="搜索会员" value={memberQuery} onChange={e => setMemberQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><input placeholder="搜索姓名、手机号、会员编号或地址" aria-label="搜索会员" value={memberQuery} onChange={e => setMemberQuery(e.target.value)} /></label>
       <select className="select" aria-label="水票" value={memberFilter.water ?? ''} onChange={e => filter('water', e.target.value)}>
         <option value="">全部水票</option><option value="BUCKET">有桶装水票</option><option value="BAG">有袋装水票</option>
       </select>
@@ -89,16 +89,16 @@ function MemberList({ onOpen }: { onOpen: (id: string) => void }) {
       <button type="button" className="btn" onClick={() => exportCsv('members')}><Icon name="export" />导出会员</button>
     </div>
     <div className="table-card">
-      <div className="table-toolbar"><div><b>会员列表</b><small>{filtered ? `符合条件 ${memberTotal} 位会员` : `共 ${memberTotal} 位会员`} · 可按姓名、手机号或会员编号搜索</small></div></div>
+      <div className="table-toolbar"><div><b>会员列表</b><small>{filtered ? `符合条件 ${memberTotal} 位会员` : `共 ${memberTotal} 位会员`} · 也可按收货人姓名、电话、小区或门牌号搜索</small></div></div>
       <div style={{ overflowX: 'auto' }}>
         <table>
-          <thead><tr><th>会员</th><th>联系电话</th><th>默认收货地址</th><th>水票（自提 / 配送）</th><th>押金余额</th><th>持有桶 / 袋</th><th>开卡日期</th><th>建档时间</th><th>操作</th></tr></thead>
+          <thead><tr><th>会员</th><th>联系电话</th><th>收货地址</th><th>水票（自提 / 配送）</th><th>押金余额</th><th>持有桶 / 袋</th><th>开卡日期</th><th>建档时间</th><th>操作</th></tr></thead>
           <tbody>
             {rows.length === 0 ? <EmptyRow colSpan={9}>{loaded ? '没有符合条件的会员' : '正在加载会员…'}</EmptyRow> : rows.map((m, i) => (
               <tr key={m.id}>
                 <td><div className="member-cell"><div className="member-avatar" style={PALETTE[i % PALETTE.length]}>{m.name[0]}</div><div><b>{m.name}</b>{m.status === 'DISABLED' && <span className="tag gray" style={{ marginLeft: 6 }} title={m.disableReason ?? undefined}>已停用</span>}<small>{m.memberNo}</small></div></div></td>
                 <td>{m.phone}</td>
-                <td style={{ whiteSpace: 'normal', minWidth: 180, maxWidth: 260 }}>{m.defaultAddress || <span style={{ color: 'var(--muted)' }}>未设置</span>}</td>
+                <td style={{ whiteSpace: 'normal', minWidth: 180, maxWidth: 260 }}>{m.matchedAddresses?.length ? <MatchedDeliveryContacts addresses={m.matchedAddresses} /> : m.defaultAddress || <span style={{ color: 'var(--muted)' }}>未设置</span>}</td>
                 <td><TicketCell tickets={m.tickets} /></td>
                 <td>¥ {money(m.depositAmount)}</td>
                 <td>{m.heldBuckets} 桶 / {m.heldBags} 袋</td>
@@ -106,6 +106,7 @@ function MemberList({ onOpen }: { onOpen: (id: string) => void }) {
                 <td>{(m.createdAt || '').slice(0, 10) || '—'}</td>
                 <td className="row-actions">
                   <button type="button" className="link" onClick={() => onOpen(m.id)}>360° 档案</button>
+                  {can(P.MemberWrite) && <button type="button" className="link" aria-label={`编辑资料 ${m.name}`} onClick={() => ops.editMember(m)}>编辑资料</button>}
                   {m.status === 'ACTIVE' && can(P.MemberWrite) && <button type="button" className="link" aria-label={`重置密码 ${m.name}`}
                     onClick={() => void dialogs.open(close => <ResetMemberPasswordDialog member={m} onClose={close} />)}>重置密码</button>}
                   {manage && (m.status === 'DISABLED'

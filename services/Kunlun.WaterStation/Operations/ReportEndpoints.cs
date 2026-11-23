@@ -242,7 +242,7 @@ public static class ReportEndpoints
 
         // 2. 数据导出 CSV 接口 (AC-18: 会员、水票流水、押金流水、订单记录可导出，且字段与列表口径一致)
         api.MapGet("/exports/{dataset}", async (
-            string dataset,
+            string dataset, DateTimeOffset? from, DateTimeOffset? to,
             ClaimsPrincipal user,
             NpgsqlDataSource db,
             KunlunAuthRepository authRepo,
@@ -257,6 +257,11 @@ public static class ReportEndpoints
             var tenantId = authRepo.DefaultTenantId;
             await using var conn = await db.OpenConnectionAsync(ct);
             var containerNames = (await WaterProducts.List(conn, tenantId, ct)).ToDictionary(p => p.ContainerId, p => $"{p.Name} · 配套{p.Unit}");
+            void BindRange(NpgsqlCommand cmd)
+            {
+                cmd.Parameters.Add(Paging.Time("from", from));
+                cmd.Parameters.Add(Paging.Time("to", to));
+            }
             string ContainerName(string id) => Csv(containerNames.GetValueOrDefault(id, id));
             var sb = new StringBuilder();
             sb.Append('\uFEFF'); // UTF-8 BOM for Excel
@@ -311,6 +316,7 @@ public static class ReportEndpoints
                     // OPENING: a deposit paid before the system and recorded later, not collected on that day.
                     sb.AppendLine("单据号,流转类型,会员ID,容器类型,数量,批次单价(元),金额(元),剩余未退数量,操作人,时间,收付方式");
                     await using var cmd = new NpgsqlCommand("""
+                        WITH flows AS (
                         SELECT deposit_no AS doc_no, CASE WHEN source IN ('OPENING','TRANSFER') THEN source ELSE 'COLLECT' END AS flow_type, member_id, COALESCE(container_type,'') AS container_type, COALESCE(paid_qty,0) AS qty,
                                COALESCE(unit_price,0), total_amount AS amount, remaining_qty, operator_name, created_at, pay_method
                         FROM plugin_kunlun_waterstation.deposit_lots
@@ -328,9 +334,11 @@ public static class ReportEndpoints
                         SELECT refund_no,'DEDUCT',member_id,COALESCE(container_type,''),COALESCE(refund_qty,0),
                                COALESCE(ROUND(deducted_amount/refund_qty,2),0),deducted_amount,0,operator_name,created_at,NULL
                         FROM plugin_kunlun_waterstation.deposit_refunds WHERE tenant_id=@tid AND deducted_amount>0
+                        ) SELECT * FROM flows WHERE (@from IS NULL OR created_at >= @from) AND (@to IS NULL OR created_at < @to)
                         ORDER BY created_at DESC
                         """, conn);
                     cmd.Parameters.AddWithValue("tid", tenantId);
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct))
                     {
@@ -346,10 +354,11 @@ public static class ReportEndpoints
                                COALESCE(actual_qty, 0), COALESCE(full_out_qty, 0), COALESCE(empty_in_qty, 0),
                                COALESCE(pickup_code, ''), status, COALESCE(diff_reason, ''), created_at, COALESCE(remark, '')
                         FROM plugin_kunlun_waterstation.water_orders
-                        WHERE tenant_id = @tid
+                        WHERE tenant_id = @tid AND (@from IS NULL OR created_at >= @from) AND (@to IS NULL OR created_at < @to)
                         ORDER BY created_at DESC
                         """, conn);
                     cmd.Parameters.AddWithValue("tid", tenantId);
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct))
                     {
@@ -370,8 +379,10 @@ public static class ReportEndpoints
                           {Field("before_state", "inStationQty")},{Field("after_state", "inStationQty")},{Customers("before_state")},{Customers("after_state")},
                           {Field("before_state", "scrappedQty")},{Field("after_state", "scrappedQty")},{Field("after_state", "totalQty")},o.reason,o.operator_name,o.created_at
                         FROM plugin_kunlun_waterstation.container_inventory_operations o
-                        WHERE o.tenant_id=@tid AND o.action IN ('RECEIVE','SCRAP','COUNT','ADJUST') ORDER BY o.created_at DESC,o.id DESC
+                        WHERE o.tenant_id=@tid AND o.action IN ('RECEIVE','SCRAP','COUNT','ADJUST')
+                          AND (@from IS NULL OR o.created_at >= @from) AND (@to IS NULL OR o.created_at < @to) ORDER BY o.created_at DESC,o.id DESC
                         """, ("tid", tenantId));
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct))
                         sb.AppendLine($"{Csv(r.GetString(0))},{ContainerName(r.GetString(1))},{r.GetString(2)},{r.GetString(3)},{r.GetString(4)},{r.GetString(5)},{r.GetString(6)},{r.GetString(7)},{r.GetString(8)},{r.GetString(9)},{Csv(r.GetString(10))},{Csv(r.GetString(11))},{r.GetDateTime(12):O}");
@@ -385,12 +396,15 @@ public static class ReportEndpoints
                         SELECT ledger_no,member_id,container_type,full_out_qty,empty_in_qty,delta_held,held_after,operator_name,created_at,business_type,
                           deposit_deducted_amount,COALESCE(order_no,'') AS reference_no,COALESCE(remark,'') AS remark,scrapped_qty,0 AS received_qty,id AS seq,{ContainerCirculation.DamagedReturns} AS damaged_return_qty
                         FROM plugin_kunlun_waterstation.container_ledgers c WHERE tenant_id=@tid
+                          AND (@from IS NULL OR c.created_at >= @from) AND (@to IS NULL OR c.created_at < @to)
                         UNION ALL
                         SELECT o.operation_no,NULL,o.container_type,0,0,0,NULL,o.operator_name,o.created_at,{ContainerCirculation.StoreBusiness},
                           0,{ContainerCirculation.StoreExpenseNo},o.reason,CASE o.action WHEN 'SCRAP' THEN o.quantity ELSE 0 END,CASE o.action WHEN 'RECEIVE' THEN o.quantity ELSE 0 END,0,0
                         FROM plugin_kunlun_waterstation.container_inventory_operations o WHERE o.tenant_id=@tid AND {ContainerCirculation.StoreFlows}
+                          AND (@from IS NULL OR o.created_at >= @from) AND (@to IS NULL OR o.created_at < @to)
                         ORDER BY created_at DESC,seq DESC,ledger_no DESC
                         """, ("tid", tenantId));
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct)) sb.AppendLine($"{Csv(r.GetString(0))},{(r.IsDBNull(1) ? "" : r.GetGuid(1).ToString())},{ContainerName(r.GetString(2))},{r.GetInt32(3)},{r.GetInt32(4)},{r.GetInt32(5)},{(r.IsDBNull(6) ? "" : r.GetInt32(6).ToString())},{Csv(r.GetString(7))},{r.GetDateTime(8):O},{r.GetString(9)},{r.GetDecimal(10):F2},{Csv(r.GetString(11))},{Csv(r.GetString(12))},{r.GetInt32(13)},{r.GetInt32(14)},{r.GetInt32(16)}");
                     break;
@@ -398,7 +412,8 @@ public static class ReportEndpoints
                 case "recharges":
                 {
                     sb.AppendLine("充值单号,会员ID,原套餐名称,实收金额,套餐付费票,赠票,收款方式,操作人,时间,补录开卡日期");
-                    await using var cmd = TicketBatches.Command(conn, null, "SELECT recharge_no,member_id,plan_snapshot->>'name',paid_amount,buy_qty,gift_qty,pay_method,operator_name,received_at,card_opened_on FROM plugin_kunlun_waterstation.water_receipts WHERE tenant_id=@tid ORDER BY received_at DESC,id", ("tid", tenantId));
+                    await using var cmd = TicketBatches.Command(conn, null, "SELECT recharge_no,member_id,plan_snapshot->>'name',paid_amount,buy_qty,gift_qty,pay_method,operator_name,received_at,card_opened_on FROM plugin_kunlun_waterstation.water_receipts WHERE tenant_id=@tid AND (@from IS NULL OR received_at >= @from) AND (@to IS NULL OR received_at < @to) ORDER BY received_at DESC,id", ("tid", tenantId));
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct)) sb.AppendLine($"{Csv(r.GetString(0))},{r.GetGuid(1)},{Csv(r.IsDBNull(2) ? "" : r.GetString(2))},{r.GetDecimal(3):F2},{r.GetInt32(4)},{r.GetInt32(5)},{r.GetString(6)},{Csv(r.GetString(7))},{r.GetDateTime(8):O},{(r.IsDBNull(9) ? "" : r.GetFieldValue<DateOnly>(9).ToString("yyyy-MM-dd"))}");
                     break;
@@ -411,8 +426,9 @@ public static class ReportEndpoints
                         FROM plugin_kunlun_waterstation.recharge_refunds rf
                         JOIN plugin_kunlun_waterstation.ticket_batches b ON b.id=rf.batch_id
                         LEFT JOIN plugin_kunlun_waterstation.recharge_orders ro ON ro.id=b.recharge_id
-                        WHERE rf.tenant_id=@tid ORDER BY rf.created_at DESC
+                        WHERE rf.tenant_id=@tid AND (@from IS NULL OR rf.created_at >= @from) AND (@to IS NULL OR rf.created_at < @to) ORDER BY rf.created_at DESC
                         """, ("tid", tenantId));
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct)) sb.AppendLine($"{Csv(r.GetString(0))},{Csv(r.GetString(1))},{r.GetGuid(2)},{Csv(r.IsDBNull(3) ? "" : r.GetString(3))},{r.GetDecimal(4):F2},{r.GetInt32(5)},{r.GetInt32(6)},{r.GetString(7)},{Csv(r.GetString(8))},{Csv(r.GetString(9))},{r.GetDateTime(10):O},{r.GetDecimal(11):F2}");
                     break;
@@ -423,8 +439,11 @@ public static class ReportEndpoints
                     await using var cmd = TicketBatches.Command(conn, null, """
                         SELECT expense_no,spent_on,category,item,quantity,amount,pay_method,remark,COALESCE(container_type,''),COALESCE(inventory_operation_no,''),
                                status,COALESCE(void_reason,''),COALESCE(voided_by,''),operator_name,created_at
-                        FROM plugin_kunlun_waterstation.expenses WHERE tenant_id=@tid ORDER BY spent_on DESC,created_at DESC
+                        FROM plugin_kunlun_waterstation.expenses WHERE tenant_id=@tid
+                          AND (@from IS NULL OR spent_on >= (@from AT TIME ZONE 'Asia/Shanghai')::date)
+                          AND (@to IS NULL OR spent_on < (@to AT TIME ZONE 'Asia/Shanghai')::date) ORDER BY spent_on DESC,created_at DESC
                         """, ("tid", tenantId));
+                    BindRange(cmd);
                     await using var r = await cmd.ExecuteReaderAsync(ct);
                     while (await r.ReadAsync(ct))
                     {

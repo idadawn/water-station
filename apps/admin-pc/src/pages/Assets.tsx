@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import {
-  KUNLUN_PERMISSIONS as P, containerKind, containerLabel, money,
-  type CirculationBusinessType, type CirculationRow, type ContainerDamageRow, type ContainerHoldingRow, type ContainerType, type Paged,
+  KUNLUN_PERMISSIONS as P, containerKind, containerLabel, dateFilterRange, money,
+  type DateFilter, type CirculationBusinessType, type CirculationRow, type ContainerDamageRow, type ContainerHoldingRow, type ContainerType, type Paged,
 } from '@kunlun/shared';
 import { Field, FormDialog, MemberPicker, ReasonChips, Stepper, useApi, useAuth, useDialogs, useIdempotencyKey, useLoader, useRun, useToast } from '@kunlun/ui';
-import { EmptyRow, Pager, useExport, useGo, useOperations } from '../common';
+import { DateFilterSelect, EmptyRow, Pager, useExport, useGo, useOperations } from '../common';
 import { useAdminData } from '../data';
 
 /** Common ways a bucket or bag gets damaged, offered as one-tap reasons when registering damage or scrapping. */
@@ -80,17 +80,19 @@ export function Assets() {
   const [type, setType] = useState<ContainerType | ''>('');
   const [status, setStatus] = useState('PENDING');
   const [page, setPage] = useState(1);
+  const [date, setDate] = useState<DateFilter>('ALL');
+  const range = dateFilterRange(date);
   const filter = (apply: () => void) => { apply(); setPage(1); };
 
   const ledger = useLoader<Ledger>(async () => tab === 'holdings' ? { tab, ...await api.containerHoldings(query, page) }
-    : tab === 'movements' ? { tab, ...await api.containerCirculation(query, type, page) }
-    : { tab, ...await api.containerDamages(query, type, status, page) }, [api, tab, query, type, status, page, version]);
+    : tab === 'movements' ? { tab, ...await api.containerCirculation(query, type, page, range) }
+    : { tab, ...await api.containerDamages(query, type, status, page, range) }, [api, tab, query, type, status, page, range.from, range.to, version]);
   const done = async () => { await refresh(); await ledger.reload(); };
 
   const reportDamage = (member?: Member) => run(async () => {
     if (!manage) throw new Error('需要袋桶维护权限');
     const reported = await dialogs.open<boolean>(close => <DamageDialog member={member} onClose={close} onDone={done} />);
-    if (reported) { setTab('damages'); setStatus('PENDING'); setSearch(''); setQuery(''); setPage(1); }
+    if (reported) { setDate('ALL'); setTab('damages'); setStatus('PENDING'); setSearch(''); setQuery(''); setPage(1); }
   })();
   const confirmScrap = (row: ContainerDamageRow) => run(() => dialogs.open(close => <ScrapDialog row={row} onClose={close} onDone={done} />))();
 
@@ -169,7 +171,7 @@ export function Assets() {
     <div className="page-head">
       <div><h2>袋桶台账</h2><p>每次新购、领走、还回、破损和报废都记一笔：谁、什么时候、几个，会员手里或店里从几个变成几个</p></div>
       <div className="head-actions">
-        <button type="button" className="btn" onClick={() => exportCsv('container-ledgers')}>导出流转记录</button>
+        <button type="button" className="btn" onClick={() => exportCsv('container-ledgers', tab === 'holdings' ? undefined : range)}>导出流转记录</button>
         <button type="button" className="btn" onClick={() => reportDamage()}>登记破损</button>
         <button type="button" className="btn primary" onClick={() => ops.movement()}>登记领还桶袋</button>
       </div>
@@ -187,6 +189,7 @@ export function Assets() {
             <option value="">全部容器</option>{products.map(p => <option key={p.containerId} value={p.containerId}>{containerLabel(p.containerId)}</option>)}
           </select>
         )}
+        {tab !== 'holdings' && <DateFilterSelect label="记录日期" value={date} onChange={next => filter(() => setDate(next))} />}
         {tab === 'damages' && (
           <select className="select" aria-label="破损状态" value={status} onChange={e => filter(() => setStatus(e.target.value))}>
             <option value="PENDING">待报废</option><option value="SCRAPPED">已报废</option><option value="RETURNED">已退回会员</option><option value="">全部状态</option>

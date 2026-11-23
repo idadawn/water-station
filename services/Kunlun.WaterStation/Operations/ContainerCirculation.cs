@@ -47,14 +47,16 @@ public static class ContainerCirculation
           c.operator_name,c.created_at,COALESCE(c.order_no,'') AS reference_no,c.business_type,c.deposit_deducted_amount,COALESCE(c.remark,'') AS remark,
           c.scrapped_qty,0 AS received_qty,NULL::int AS store_before,NULL::int AS store_after,c.id AS seq,{DamagedReturns} AS damaged_return_qty
         FROM plugin_kunlun_waterstation.container_ledgers c JOIN plugin_kunlun_waterstation.members m ON m.id=c.member_id AND m.tenant_id=c.tenant_id
-        WHERE c.tenant_id=@tid AND (@type='' OR c.container_type=@type)
+        WHERE c.tenant_id=@tid AND (@from::timestamptz IS NULL OR c.created_at >= @from) AND (@to::timestamptz IS NULL OR c.created_at < @to)
+          AND (@type='' OR c.container_type=@type)
           AND (@q='' OR m.name ILIKE @search OR m.phone ILIKE @search OR m.member_no ILIKE @search OR c.ledger_no ILIKE @search OR c.order_no ILIKE @search)
         UNION ALL
         SELECT o.operation_no,'','',o.container_type,0,0,0,0,o.operator_name,o.created_at,{StoreExpenseNo},{StoreBusiness},0,o.reason,
           CASE o.action WHEN 'SCRAP' THEN o.quantity ELSE 0 END,CASE o.action WHEN 'RECEIVE' THEN o.quantity ELSE 0 END,
           (o.before_state->>'inStationQty')::int,(o.after_state->>'inStationQty')::int,0,0
         FROM plugin_kunlun_waterstation.container_inventory_operations o
-        WHERE o.tenant_id=@tid AND {StoreFlows} AND (@type='' OR o.container_type=@type)
+        WHERE o.tenant_id=@tid AND (@from::timestamptz IS NULL OR o.created_at >= @from) AND (@to::timestamptz IS NULL OR o.created_at < @to)
+          AND {StoreFlows} AND (@type='' OR o.container_type=@type)
           AND (@q='' OR o.operation_no ILIKE @search OR o.reason ILIKE @search OR o.receipt->'expense'->>'expenseNo' ILIKE @search)
         """;
 
@@ -114,12 +116,12 @@ public static class ContainerCirculation
     {
         app.MapPost("/api/containers/damages",ReportDamage).RequireAuthorization();
         app.MapPost("/api/containers/damages/{id:guid}/scrap",ScrapDamage).RequireAuthorization();
-        app.MapGet("/api/containers/circulation",async(string? q,string? containerType,int? page,ClaimsPrincipal user,NpgsqlDataSource db,KunlunAuthRepository repo,CancellationToken ct)=>
+        app.MapGet("/api/containers/circulation",async(string? q,string? containerType,int? page,DateTimeOffset? from,DateTimeOffset? to,ClaimsPrincipal user,NpgsqlDataSource db,KunlunAuthRepository repo,CancellationToken ct)=>
         {
             if(!CanRead(user))return Results.Forbid();
             ValidateFilter(containerType,page);
             await using var conn=await db.OpenConnectionAsync(ct);
-            var args=FilterArgs(repo.DefaultTenantId,q,containerType,page);
+            var args=FilterArgs(repo.DefaultTenantId,q,containerType,page,from,to);
             await using var count=Command(conn,null,$"WITH flows AS ({Flows}) SELECT count(*) FROM flows",args);
             var total=Convert.ToInt64(await count.ExecuteScalarAsync(ct));
             await using var cmd=Command(conn,null,$"""
@@ -151,21 +153,22 @@ public static class ContainerCirculation
             while(await r.ReadAsync(ct))rows.Add(new{id=r.GetGuid(0),memberNo=r.GetString(1),name=r.GetString(2),phone=r.GetString(3),heldBags=r.GetInt32(4),heldBuckets=r.GetInt32(5),depositAmount=r.GetDecimal(6),pendingDamageQty=r.GetInt64(7),pendingDamageAmount=r.GetDecimal(8),holdings=JsonSerializer.Deserialize<JsonElement>(r.GetString(9))});
             return Results.Ok(new{rows,total,page=page??1,pageSize=20});
         }).RequireAuthorization();
-        app.MapGet("/api/containers/damages",async(string? q,string? containerType,string? status,int? page,ClaimsPrincipal user,NpgsqlDataSource db,KunlunAuthRepository repo,CancellationToken ct)=>
+        app.MapGet("/api/containers/damages",async(string? q,string? containerType,string? status,int? page,DateTimeOffset? from,DateTimeOffset? to,ClaimsPrincipal user,NpgsqlDataSource db,KunlunAuthRepository repo,CancellationToken ct)=>
         {
             if(!CanRead(user))return Results.Forbid();ValidateFilter(containerType,page);
             if(status is not(null or "" or "PENDING" or "SCRAPPED" or "RETURNED"))throw new BusinessRuleException("破损状态无效");
             await using var conn=await db.OpenConnectionAsync(ct);
-            var args=FilterArgs(repo.DefaultTenantId,q,containerType,page).Append(("status",(object)(status??""))).ToArray();
-            const string from=$"""
+            var args=FilterArgs(repo.DefaultTenantId,q,containerType,page,from,to).Append(("status",(object)(status??""))).ToArray();
+            const string source=$"""
                 FROM plugin_kunlun_waterstation.container_damages d JOIN plugin_kunlun_waterstation.members m ON m.id=d.member_id AND m.tenant_id=d.tenant_id
                 LEFT JOIN plugin_kunlun_waterstation.container_ledgers mv ON mv.id=d.movement_id AND mv.tenant_id=d.tenant_id
                 LEFT JOIN plugin_kunlun_waterstation.refund_requests rr ON {ReviewLink}
-                WHERE d.tenant_id=@tid AND (@type='' OR d.container_type=@type) AND (@status='' OR d.status=@status)
+                WHERE d.tenant_id=@tid AND (@from::timestamptz IS NULL OR d.created_at >= @from) AND (@to::timestamptz IS NULL OR d.created_at < @to)
+                  AND (@type='' OR d.container_type=@type) AND (@status='' OR d.status=@status)
                   AND (@q='' OR m.name ILIKE @search OR m.phone ILIKE @search OR m.member_no ILIKE @search OR d.damage_no ILIKE @search OR d.handover_order_no ILIKE @search OR mv.ledger_no ILIKE @search)
                 """;
-            await using var count=Command(conn,null,"SELECT count(*) "+from,args);var total=Convert.ToInt64(await count.ExecuteScalarAsync(ct));
-            await using var cmd=Command(conn,null,"SELECT d.id,d.damage_no,m.name,m.member_no,d.container_type,d.quantity,d.deposit_amount,d.status,d.reason,d.operator_name,d.created_at,d.lot_breakdown::text,COALESCE(d.scrap_no,''),COALESCE(d.scrap_reason,''),d.deposit_waived,d.uncovered_qty,d.uncovered_note,d.fee_paid,d.handover_order_no,mv.ledger_no,rr.status "+from+" ORDER BY d.created_at DESC,d.id LIMIT 20 OFFSET @offset",args);
+            await using var count=Command(conn,null,"SELECT count(*) "+source,args);var total=Convert.ToInt64(await count.ExecuteScalarAsync(ct));
+            await using var cmd=Command(conn,null,"SELECT d.id,d.damage_no,m.name,m.member_no,d.container_type,d.quantity,d.deposit_amount,d.status,d.reason,d.operator_name,d.created_at,d.lot_breakdown::text,COALESCE(d.scrap_no,''),COALESCE(d.scrap_reason,''),d.deposit_waived,d.uncovered_qty,d.uncovered_note,d.fee_paid,d.handover_order_no,mv.ledger_no,rr.status "+source+" ORDER BY d.created_at DESC,d.id LIMIT 20 OFFSET @offset",args);
             var rows=new List<object>();await using var r=await cmd.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct))rows.Add(new{id=r.GetGuid(0),damageNo=r.GetString(1),memberName=r.GetString(2),memberNo=r.GetString(3),containerType=r.GetString(4),quantity=r.GetInt32(5),depositAmount=r.GetDecimal(6),status=r.GetString(7),reason=r.GetString(8),operatorName=r.GetString(9),createdAt=r.GetDateTime(10),lotBreakdown=JsonSerializer.Deserialize<JsonElement>(r.GetString(11)),scrapNo=r.GetString(12),scrapReason=r.GetString(13),depositWaived=r.GetBoolean(14),uncoveredQty=r.GetInt32(15),uncoveredNote=r.GetString(16),feePaid=r.IsDBNull(17)?(bool?)null:r.GetBoolean(17),handoverOrderNo=r.IsDBNull(18)?null:r.GetString(18),movementNo=r.IsDBNull(19)?null:r.GetString(19),reviewStatus=r.IsDBNull(20)?null:r.GetString(20)});
             return Results.Ok(new{rows,total,page=page??1,pageSize=20});
@@ -176,7 +179,8 @@ public static class ContainerCirculation
     {
         if((!string.IsNullOrEmpty(type) && !ProductContainers.ValidId(type)) || page is <1 or >1000000)throw new BusinessRuleException("筛选或页码无效");
     }
-    private static (string,object)[] FilterArgs(Guid tid,string? q,string? type,int? page)=>[("tid",tid),("q",q?.Trim()??""),("search","%"+(q?.Trim()??"")+"%"),("type",type??""),("offset",((page??1)-1)*20)];
+    private static (string,object)[] FilterArgs(Guid tid,string? q,string? type,int? page, DateTimeOffset? from = null, DateTimeOffset? to = null)=>
+        [("from", (object?)from?.UtcDateTime ?? DBNull.Value), ("to", (object?)to?.UtcDateTime ?? DBNull.Value), ("tid",tid),("q",q?.Trim()??""),("search","%"+(q?.Trim()??"")+"%"),("type",type??""),("offset",((page??1)-1)*20)];
 
     private static async Task<IResult> ReportDamage(ReportContainerDamageRequest req,ClaimsPrincipal user,NpgsqlDataSource db,KunlunAuthRepository repo,CancellationToken ct)
     {

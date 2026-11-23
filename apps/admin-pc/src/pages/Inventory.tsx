@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import {
-  KUNLUN_PERMISSIONS as P, containerKind, containerLabel, money, shortDateTime,
-  type ContainerSummaryItem, type ContainerType, type InventoryAction, type InventoryBalance, type InventoryOperation,
+  KUNLUN_PERMISSIONS as P, containerKind, containerLabel, dateFilterRange, money, shortDateTime,
+  type DateFilter, type ContainerSummaryItem, type ContainerType, type InventoryAction, type InventoryBalance, type InventoryOperation,
 } from '@kunlun/shared';
-import { Icon, StockEditDialog, StockQuickDialog, useAuth, useDialogs, useLoader, useRun, type StockCount } from '@kunlun/ui';
-import { EmptyRow, useExport, useGo } from '../common';
+import { Icon, StockEditDialog, StockQuickDialog, useAuth, useDialogs, useRun, type StockCount } from '@kunlun/ui';
+import { DateFilterSelect, EmptyRow, Pager, emptyPage, useExport, useGo, usePagedTable } from '../common';
 import { useAdminData } from '../data';
 
 type CardActions = { edit: (focus: StockCount) => void; quick: (action: InventoryAction) => void };
@@ -15,7 +15,7 @@ const PLAIN_REASONS = ['修改数量', '盘点', '新购', '报废'];
 const customersOf = (b: InventoryBalance) => b.withCustomersQty ?? b.memberHeldQty + (b.unregisteredOutQty ?? 0);
 
 export function Inventory() {
-  const { containers, loaded, version, refresh } = useAdminData();
+  const { containers, loaded, refresh } = useAdminData();
   const { api, can } = useAuth();
   const dialogs = useDialogs();
   const run = useRun();
@@ -23,7 +23,10 @@ export function Inventory() {
   const go = useGo();
   const permitted = can(P.ContainerInventoryManage);
   const [filter, setFilter] = useState<ContainerType | ''>('');
-  const history = useLoader(() => permitted ? api.inventoryOperations(filter || undefined) : Promise.resolve([]), [api, permitted, filter, version]);
+  const [date, setDate] = useState<DateFilter>('ALL');
+  const range = dateFilterRange(date);
+  const history = usePagedTable(page => permitted ? api.inventoryOperationsPage(filter, range, page)
+    : Promise.resolve(emptyPage<{ operation: InventoryOperation; memberName: string }>()), [permitted, filter, range]);
   const edit = (config: ContainerSummaryItem, focus: StockCount = 'inStationQty') =>
     run(() => dialogs.open(close => <StockEditDialog config={config} focus={focus} onClose={close} onDone={refresh} />))();
   const quick = (config: ContainerSummaryItem, action: InventoryAction) =>
@@ -32,7 +35,7 @@ export function Inventory() {
   return <>
     <div className="page-head">
       <div><h2>袋桶库存</h2><p>新买的点「新购」，坏了扔掉的点「报废」，数量不对随时点数字改；领桶、还桶、破损登记会自动跟着变</p></div>
-      {permitted && <div className="head-actions"><button type="button" className="btn" onClick={() => exportCsv('inventory-operations')}><Icon name="export" size="sm" />导出修改记录</button></div>}
+      {permitted && <div className="head-actions"><button type="button" className="btn" onClick={() => exportCsv('inventory-operations', range)}><Icon name="export" size="sm" />导出修改记录</button></div>}
     </div>
 
     <div className="stock-grid">
@@ -43,12 +46,15 @@ export function Inventory() {
 
     {permitted && (
       <div className="table-card">
-        <div className="table-toolbar">
-          <div><b>修改记录</b><small>最近 100 笔，含新购、报废和会员破损报废</small></div>
-          <select className="select stock-filter" aria-label="按桶袋筛选" value={filter} onChange={e => setFilter(e.target.value as ContainerType | '')}>
-            <option value="">全部桶袋</option>
-            {containers.map(c => <option key={c.containerType} value={c.containerType}>{containerLabel(c.containerType)}</option>)}
-          </select>
+        <div className="table-toolbar stock-history-toolbar">
+          <div><b>修改记录</b><small>含新购、报废和会员破损报废</small></div>
+          <div className="container-filters">
+            <DateFilterSelect label="修改日期" value={date} onChange={setDate} />
+            <select className="select stock-filter" aria-label="按桶袋筛选" value={filter} onChange={e => setFilter(e.target.value as ContainerType | '')}>
+              <option value="">全部桶袋</option>
+              {containers.map(c => <option key={c.containerType} value={c.containerType}>{containerLabel(c.containerType)}</option>)}
+            </select>
+          </div>
         </div>
         <div className="inventory-table-scroll">
           <table className="stock-history">
@@ -56,8 +62,8 @@ export function Inventory() {
             <tbody>
               {history.error ? <EmptyRow colSpan={5}>{history.error}</EmptyRow>
                 : !history.data ? <EmptyRow colSpan={5}>正在加载…</EmptyRow>
-                : !history.data.length ? <EmptyRow colSpan={5}>还没有记录，点上面的按钮或数字就能登记</EmptyRow>
-                : history.data.map(({ operation: o, memberName }) => (
+                : !history.data.rows.length ? <EmptyRow colSpan={5}>没有符合条件的库存修改记录</EmptyRow>
+                : history.data.rows.map(({ operation: o, memberName }) => (
                   <tr key={o.id}>
                     <td>{shortDateTime(o.createdAt)}<br /><small title={o.operationNo}>{o.operationNo.slice(0, 10)}</small></td>
                     <td>{containerLabel(o.containerType)}</td>
@@ -70,6 +76,7 @@ export function Inventory() {
             </tbody>
           </table>
         </div>
+        <div className="table-footer"><span>共 {history.total} 条</span><Pager page={history.page} total={history.total} onChange={history.setPage} /></div>
       </div>
     )}
   </>;

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { expenseCategoryLabel, money, type OperatingPeriod, type OperatingReport } from '@kunlun/shared';
+import { expenseCategoryLabel, money, todayRange, type CalendarRange, type OperatingPeriod, type OperatingReport } from '@kunlun/shared';
 import { Icon, useAuth, useLoader } from '@kunlun/ui';
 import { useAdminData } from '../data';
-import { useGo } from '../common';
+import { DateRangeFields, useGo } from '../common';
 
 const periods: Record<OperatingPeriod, string> = {
-  today: '当日', week: '本周', 'last-week': '上周', month: '本月', 'last-month': '上月', year: '本年', 'last-year': '上年',
+  today: '当日', week: '本周', 'last-week': '上周', month: '本月', 'last-month': '上月', year: '本年', 'last-year': '上年', custom: '自定义',
 };
 
 type Metric = 'receipts' | 'water';
@@ -16,19 +16,22 @@ const yuan = (amount: number) => amount.toLocaleString('zh-CN', { minimumFractio
 export function PeriodOverview() {
   const [metric, setMetric] = useState<Metric>('receipts');
   const [period, setPeriod] = useState<OperatingPeriod>('today');
+  const [range, setRange] = useState(todayRange);
+  const custom = period === 'custom' ? range : undefined;
   return <section aria-label="分时段经营统计">
     <div className="period-picker" role="group" aria-label="经营统计周期">
       {(Object.keys(periods) as OperatingPeriod[]).map(id =>
         <button key={id} type="button" aria-pressed={id === period} onClick={() => setPeriod(id)}>{periods[id]}</button>)}
     </div>
-    <PeriodFigures key={period} period={period} metric={metric} setMetric={setMetric} />
+    {custom && <DateRangeFields value={custom} onChange={setRange} />}
+    <PeriodFigures key={custom ? `${period}-${custom.start}-${custom.end}` : period} period={period} range={custom} metric={metric} setMetric={setMetric} />
   </section>;
 }
 
-function PeriodFigures({ period, metric, setMetric }: { period: OperatingPeriod } & MetricSelection) {
+function PeriodFigures({ period, range: custom, metric, setMetric }: { period: OperatingPeriod; range?: CalendarRange } & MetricSelection) {
   const { api } = useAuth();
   const { version } = useAdminData();
-  const { data, error, reload } = useLoader(() => api.operatingPeriod(period), [api, period, version]);
+  const { data, error, reload } = useLoader(() => api.operatingPeriod(period, custom), [api, period, custom, version]);
   const go = useGo();
   if (error) return <div role="alert" className="period-status">{error} <button type="button" className="text-btn" onClick={reload}>重新加载</button></div>;
   if (!data) return <div role="status" className="period-status">正在统计{periods[period]}经营情况…</div>;

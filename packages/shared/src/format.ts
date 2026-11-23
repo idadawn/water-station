@@ -1,4 +1,4 @@
-import type { ContainerType, ExpenseCategory, FulfillMode, MemberProfile, MemberTicket, OrderStatus, PayMethod, TicketBatch, WaterOrder, WaterProduct, WaterType } from './types';
+import type { ContainerType, ExpenseCategory, FulfillMode, MatchedAddress, MemberProfile, MemberTicket, OrderStatus, PayMethod, TicketBatch, TimeRange, WaterOrder, WaterProduct, WaterType } from './types';
 
 // Name and container of every water product by code. Each app passes the product lists it loads to rememberProducts;
 // the two original products are known before the first load.
@@ -99,9 +99,23 @@ export const shortDateTime = (value: string) =>
 export const stationDay = (date: Date = new Date()) =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 
-export type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
+export type DatePreset = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
+export type CalendarRange = { start: string; end: string };
+export type DateFilter = DatePreset | CalendarRange;
+export function todayRange(): CalendarRange {
+  const today = stationDay();
+  return { start: today, end: today };
+}
+
+export function dateFilterRange(filter: DateFilter): TimeRange {
+  if (typeof filter === 'string') return { from: dateFilterFrom(filter) };
+  const from = new Date(`${filter.start}T00:00:00+08:00`);
+  const end = new Date(`${filter.end}T00:00:00+08:00`);
+  return { from: from.toISOString(), to: new Date(end.getTime() + 86400000).toISOString() };
+}
+
 /** Start of the window in the station's time zone as ISO 8601, for a list query's `from`; undefined for 全部时间. */
-export function dateFilterFrom(filter: DateFilter, now: Date = new Date()): string | undefined {
+export function dateFilterFrom(filter: DatePreset, now: Date = new Date()): string | undefined {
   if (filter === 'ALL') return undefined;
   const day = stationDay(now);
   const start = new Date(`${filter === 'MONTH' ? day.slice(0, 8) + '01' : day}T00:00:00+08:00`);
@@ -110,6 +124,8 @@ export function dateFilterFrom(filter: DateFilter, now: Date = new Date()): stri
 
 /** Joins 收货地址 and 门牌号 exactly as the server stores the display text. */
 export const fullAddress = (location: string, doorNo: string) => [location.trim(), doorNo.trim()].filter(Boolean).join(' ');
+
+export const deliveryContactLabel = (a: MatchedAddress) => `${a.fullAddress} · ${a.contactName} · ${a.contactPhone}`;
 
 export const PHONE_PATTERN = '1[0-9]{10}';
 export const isMobilePhone = (value: string) => /^1\d{10}$/.test(value.trim());

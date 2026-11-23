@@ -51,6 +51,8 @@ export interface MemberProfile {
   phone: string;
   /** Display text of the default delivery address; empty when the member has none. */
   defaultAddress: string;
+  /** Address book entries matching the current member search. */
+  matchedAddresses?: MatchedAddress[];
   /** Non-empty balances, oldest product first; a product and mode missing here has no tickets. */
   tickets: MemberTicket[];
   depositAmount: number;
@@ -82,6 +84,8 @@ export interface MemberTicket {
 }
 
 /** 会员收货地址：收货地址 + 门牌号 + 联系人 + 手机号，每位会员最多一个默认地址。 */
+export type MatchedAddress = Pick<MemberAddress, 'id' | 'fullAddress' | 'contactName' | 'contactPhone'>;
+
 export interface MemberAddress {
   id: string;
   memberId: string;
@@ -315,7 +319,7 @@ export interface FinanceSummaryReport {
   generatedAt: string;
 }
 
-export type OperatingPeriod = 'today' | 'week' | 'last-week' | 'month' | 'last-month' | 'year' | 'last-year';
+export type OperatingPeriod = 'today' | 'week' | 'last-week' | 'month' | 'last-month' | 'year' | 'last-year' | 'custom';
 
 export interface OperatingPoint {
   label: string;
@@ -460,7 +464,7 @@ export interface TimeRange {
 }
 
 export interface MemberQuery extends PageQuery {
-  /** Matches member number, name or phone. */
+  /** Matches member number, name, phone, delivery address or delivery contact. */
   q?: string;
   status?: ActiveStatus;
   /** Members holding usable tickets of any water carried in this kind of container. */

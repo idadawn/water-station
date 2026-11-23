@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  PAY_METHODS, dateFilterFrom, modeLabel, money, payMethodLabel, shortDateTime, unitOf, waterFallbackLabel,
+  PAY_METHODS, dateFilterRange, modeLabel, money, payMethodLabel, shortDateTime, unitOf, waterFallbackLabel,
   type DateFilter, type GiftReview, type PayMethod, type RechargeLedgerQuery, type RechargeLedgerRow, type RechargeRefundLedgerRow,
 } from '@kunlun/shared';
 import { Dialog, Icon, useAuth, useDialogs } from '@kunlun/ui';
@@ -21,7 +21,8 @@ export function Recharges() {
   const [date, setDate] = useState<DateFilter>('ALL');
   const [pay, setPay] = useState<PayMethod | ''>('');
   const q = useDebounced(query.trim());
-  const filter: RechargeLedgerQuery = { q, from: dateFilterFrom(date), payMethod: pay || undefined };
+  const range = dateFilterRange(date);
+  const filter: RechargeLedgerQuery = { q, ...range, payMethod: pay || undefined };
   const filtered = !!(q || filter.from || pay);
   const refunds = tab === 'refunds';
 
@@ -53,7 +54,7 @@ export function Recharges() {
       </select>
       <DateFilterSelect label="业务时间" value={date} onChange={setDate} />
       <div className="filter-spacer" />
-      <button type="button" className="btn" onClick={() => exportCsv(refunds ? 'recharge-refunds' : 'recharges')}><Icon name="export" />导出{refunds ? '退款' : '充值'}明细</button>
+      <button type="button" className="btn" onClick={() => exportCsv(refunds ? 'recharge-refunds' : 'recharges', range)}><Icon name="export" />导出{refunds ? '退款' : '充值'}明细</button>
     </div>
     {refunds ? <RefundTable filter={filter} filtered={filtered} /> : <RechargeTable filter={filter} filtered={filtered} />}
   </>;
