@@ -111,10 +111,34 @@ jobs:
       # Unsigned until a code-signing certificate exists; Windows shows a SmartScreen prompt on first install.
       - name: Build the Windows admin installer
         run: pnpm --filter @kunlun/windows-admin package:win
+      - name: Verify the production update feed and packaged runtime
+        run: pnpm --filter @kunlun/windows-admin exec node scripts/check-package.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: windows-admin-installer
-          path: apps/windows-admin/release/*.exe
+          path: |
+            apps/windows-admin/release/*.exe
+            apps/windows-admin/release/*.blockmap
+            apps/windows-admin/release/latest.yml
+      - name: Build and verify the test environment installer
+        env:
+          KUNLUN_DESKTOP_ORIGIN: https://kunlun-test.idalee.cn
+        run: |
+          pnpm --filter @kunlun/windows-admin package:win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @kunlun/windows-admin exec node scripts/check-package.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-admin-test-installer
+          path: |
+            apps/windows-admin/release/test/*.exe
+            apps/windows-admin/release/test/*.blockmap
+            apps/windows-admin/release/test/latest.yml
+      - name: Exercise automatic download and installation on quit
+        working-directory: apps/windows-admin
+        env:
+          KUNLUN_DESKTOP_ORIGIN: https://kunlun-test.idalee.cn
+        run: ./scripts/test-windows-update.ps1
   ios:
     # Skipped for now (2026-11-18): Apple's developer services are failing and macos-15 runners keep
     # queueing, so the job blocked every PR. A job skipped by its condition reports success, so the

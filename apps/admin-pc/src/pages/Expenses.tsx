@@ -3,7 +3,7 @@ import {
   EXPENSE_CATEGORIES, KUNLUN_PERMISSIONS as P, containerLabel, containerUnit, dateFilterRange, expenseCategoryLabel, money, payMethodLabel, shortDateTime, stationDay,
   type ContainerType, type DateFilter, type Expense, type ExpenseCategory, type ExpenseQuery, type ExpenseStatus, type PayMethod,
 } from '@kunlun/shared';
-import { Field, FormDialog, Icon, PayButtons, ReasonChips, Stepper, useAuth, useDialogs, useIdempotencyKey, useLoader, useRun, useToast } from '@kunlun/ui';
+import { SearchInput, Field, FormDialog, Icon, PayButtons, ReasonChips, Stepper, useAuth, useDialogs, useIdempotencyKey, useLoader, useRun, useToast } from '@kunlun/ui';
 import { DATE_PRESETS, DateFilterSelect, EmptyRow, Pager, StatCard, emptyPage, ledgerEmptyText, useDebounced, useExport, useGo, usePagedTable, PAGE_SIZE } from '../common';
 import { useAdminData } from '../data';
 
@@ -57,7 +57,7 @@ export function Expenses() {
         foot="水费净收 − 费用支出；其中还有会员没用完的水费，可能要退" />
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索单号、买了什么、备注或经办人" aria-label="搜索支出" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索单号、买了什么、备注或经办人" aria-label="搜索支出" value={query} onSearch={setQuery} /></label>
       <select className="select" aria-label="支出类别" value={category} onChange={e => setCategory(e.target.value as ExpenseCategory | '')}>
         <option value="">全部类别</option>
         {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}

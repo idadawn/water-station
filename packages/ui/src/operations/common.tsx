@@ -1,3 +1,4 @@
+import { SearchInput } from '../search-input';
 import { useEffect, useState } from 'react';
 import { PAY_METHODS, deliveryContactLabel, type MemberProfile, type PayMethod, type ReviewSettings } from '@kunlun/shared';
 import { useApi } from '../auth';
@@ -118,8 +119,8 @@ export function MemberPicker({ id, value, onChange, disabled }: { id: string; va
     : result.q ? `找到 ${result.total} 位会员` : '');
   return (
     <div className="member-picker">
-      <input className="input" type="search" aria-label="搜索会员" placeholder="搜索姓名、手机号、会员编号或地址" value={query} disabled={disabled}
-        onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+      <SearchInput className="input" type="search" aria-label="搜索会员" placeholder="搜索姓名、手机号、会员编号或地址" value={query} disabled={disabled}
+        onSearch={setQuery} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault(); }} />
       <select id={id} className="select" required disabled={disabled} value={value?.id ?? ''}
         onChange={e => { const m = rows.find(r => r.id === e.target.value); if (m) onChange(m); }}>
         {!value && <option value="">请选择会员</option>}

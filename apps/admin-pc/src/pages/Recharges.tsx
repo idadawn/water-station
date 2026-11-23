@@ -3,7 +3,7 @@ import {
   PAY_METHODS, dateFilterRange, modeLabel, money, payMethodLabel, shortDateTime, unitOf, waterFallbackLabel,
   type DateFilter, type GiftReview, type PayMethod, type RechargeLedgerQuery, type RechargeLedgerRow, type RechargeRefundLedgerRow,
 } from '@kunlun/shared';
-import { Dialog, Icon, useAuth, useDialogs } from '@kunlun/ui';
+import { SearchInput, Dialog, Icon, useAuth, useDialogs } from '@kunlun/ui';
 import { DateFilterSelect, EmptyRow, Pager, StatCard, handledBy, ledgerEmptyText, useDebounced, useExport, useLedger, useOperations } from '../common';
 import { useAdminData } from '../data';
 
@@ -47,7 +47,7 @@ export function Recharges() {
       ))}
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索会员、手机号或单号" aria-label="搜索会员、手机号或单号" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索会员、手机号或单号" aria-label="搜索会员、手机号或单号" value={query} onSearch={setQuery} /></label>
       <select className="select" aria-label={refunds ? '退款方式' : '收款方式'} value={pay} onChange={e => setPay(e.target.value as PayMethod | '')}>
         <option value="">{refunds ? '全部退款方式' : '全部收款方式'}</option>
         {PAY_METHODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}

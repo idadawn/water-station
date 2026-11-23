@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { KUNLUN_PERMISSIONS as P, money, pageCount, ticketGroups, type MemberTicket } from '@kunlun/shared';
-import { Icon, MatchedDeliveryContacts, ResetMemberPasswordDialog, useDialogs, useAuth } from '@kunlun/ui';
+import { SearchInput, Icon, MatchedDeliveryContacts, ResetMemberPasswordDialog, useDialogs, useAuth } from '@kunlun/ui';
 import { EmptyRow, Pager, useExport, useOperations } from '../common';
 import { MEMBER_PAGE_SIZE, useAdminData, type MemberFilter } from '../data';
 import { useMemberStatusActions } from '../memberStatus';
@@ -47,7 +47,7 @@ export function Members() {
 }
 
 function MemberList({ onOpen }: { onOpen: (id: string) => void }) {
-  const { members: rows, memberTotal, loaded, overview, memberQuery, setMemberQuery, memberFilter, setMemberFilter, memberPage, setMemberPage } = useAdminData();
+  const { members: rows, memberTotal, membersLoaded: loaded, memberError, overview, memberQuery, setMemberQuery, memberFilter, setMemberFilter, memberPage, setMemberPage } = useAdminData();
   const ops = useOperations();
   const exportCsv = useExport();
   const { can } = useAuth();
@@ -78,7 +78,7 @@ function MemberList({ onOpen }: { onOpen: (id: string) => void }) {
       <div className="summary-item"><small>持有容器会员</small><b>{overview?.membersWithContainers ?? withContainers}</b></div>
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索姓名、手机号、会员编号或地址" aria-label="搜索会员" value={memberQuery} onChange={e => setMemberQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索姓名、手机号、会员编号或地址" aria-label="搜索会员" value={memberQuery} onSearch={setMemberQuery} /></label>
       <select className="select" aria-label="水票" value={memberFilter.water ?? ''} onChange={e => filter('water', e.target.value)}>
         <option value="">全部水票</option><option value="BUCKET">有桶装水票</option><option value="BAG">有袋装水票</option>
       </select>
@@ -94,7 +94,7 @@ function MemberList({ onOpen }: { onOpen: (id: string) => void }) {
         <table>
           <thead><tr><th>会员</th><th>联系电话</th><th>收货地址</th><th>水票（自提 / 配送）</th><th>押金余额</th><th>持有桶 / 袋</th><th>开卡日期</th><th>建档时间</th><th>操作</th></tr></thead>
           <tbody>
-            {rows.length === 0 ? <EmptyRow colSpan={9}>{loaded ? '没有符合条件的会员' : '正在加载会员…'}</EmptyRow> : rows.map((m, i) => (
+            {rows.length === 0 ? <EmptyRow colSpan={9}>{memberError || (loaded ? '没有符合条件的会员' : '正在加载会员…')}</EmptyRow> : rows.map((m, i) => (
               <tr key={m.id}>
                 <td><div className="member-cell"><div className="member-avatar" style={PALETTE[i % PALETTE.length]}>{m.name[0]}</div><div><b>{m.name}</b>{m.status === 'DISABLED' && <span className="tag gray" style={{ marginLeft: 6 }} title={m.disableReason ?? undefined}>已停用</span>}<small>{m.memberNo}</small></div></div></td>
                 <td>{m.phone}</td>

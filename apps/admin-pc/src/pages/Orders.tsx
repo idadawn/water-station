@@ -3,7 +3,7 @@ import {
   dateFilterRange, isActiveOrder, orderStatusLabel, shortDateTime, unitOf, waterFallbackLabel,
   type DateFilter, type FulfillMode, type OrderQuery, type WaterOrder,
 } from '@kunlun/shared';
-import { ConfirmDialog, Dialog, Icon, useApi, useDialogs, useRun, useToast } from '@kunlun/ui';
+import { SearchInput, ConfirmDialog, Dialog, Icon, useApi, useDialogs, useRun, useToast } from '@kunlun/ui';
 import { DateFilterSelect, EmptyRow, PAGE_SIZE, Pager, emptyPage, useDebounced, useExport, useOperations, usePagedTable } from '../common';
 import { useAdminData } from '../data';
 
@@ -73,7 +73,7 @@ export function Orders() {
       ))}
     </div>
     <div className="filter-card">
-      <label className="field-search"><Icon name="search" /><input placeholder="搜索水单号、会员姓名、手机号或地址" aria-label="搜索水单" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索水单号、会员姓名、手机号或地址" aria-label="搜索水单" value={query} onSearch={setQuery} /></label>
       <select className="select" aria-label="领取方式" value={mode} onChange={e => setMode(e.target.value as typeof mode)}>
         <option value="">全部领取方式</option><option value="DELIVERY">配送</option><option value="PICKUP">自提</option>
       </select>

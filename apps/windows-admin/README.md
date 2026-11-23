@@ -2,7 +2,8 @@
 
 给门店电脑用的管理后台桌面版，支持 Windows 10 / 11（64 位）。装好后桌面和开始菜单有「绿麒麟水站管理端」图标，双击打开一个独立窗口，里面就是正式环境的管理后台 `https://kunlun.idalee.cn/admin`。
 
-- **页面始终来自服务器**：安装包里只有一个窗口外壳，不带页面。线上发布新版管理端后，门店电脑打开就是新版，不用重装；只有改了外壳本身（图标、窗口行为）才要发新安装包。
+- **页面始终来自服务器**：安装包里只有一个窗口外壳，不带页面。线上发布新版管理端后，重新打开或按 F5 即可加载新版页面。
+- **客户端自动升级**（1.2.0 起）：启动时和运行期间每 4 小时从本环境检查一次新版，后台下载并校验。下载完成后会收到 Windows 通知，正常关闭客户端时安装，下次打开即可使用。
 - **只开管理端**：窗口里只能打开这台服务器的 `/admin` 页面。员工端、会员端和别的网站都不会在窗口里打开；其他 `https://` 链接交给系统浏览器，其余链接不处理。
 - **必须联网**：连不上服务器时显示「连不上服务器」，服务器在更新、返回 502 时显示「服务器暂时没有响应」，两种情况都每 10 秒自动重试，恢复后自动回到原来的页面。
 - **自动登录**（1.1.0 起）：登录页的密码框下面有「自动登录（在这台电脑上记住密码）」，默认勾上。第一次输入用户名和密码登录成功后，就不用再输了：每次打开 App、登录过期（12 小时）或账号在别处被强制下线回到登录页时，都会自动登录。
@@ -21,7 +22,7 @@
 1. 拿到 `kunlun-admin-setup-<版本>.exe`（CI 的 `windows-admin-installer` 产物，或按下面自己打包），拷到门店电脑上双击。
 2. 安装包没有代码签名，Windows 第一次会提示「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。没有签名时，每个新版本的安装包第一次运行都会这样提示一次。
 3. 一键安装到当前用户（`%LOCALAPPDATA%\Programs`），不需要管理员权限，装完自动打开。卸载在「设置 → 应用」里找「绿麒麟水站管理端」，卸载会删除保存的密码、自动登录设置、窗口大小和缩放设置。
-4. 升级：直接运行新版本安装包覆盖安装，不用先卸载，保存的密码和设置都保留。
+4. 已安装 1.1.1 或更早版本的电脑，第一次手动运行同一环境的 1.2.0 或更高版本安装包覆盖安装，保留已保存的密码和设置。之后由客户端自动升级。
 
 只有 64 位系统能装。在「设置 → 系统 → 关于 → 系统类型」可以看是 64 位还是 32 位。
 
@@ -48,12 +49,19 @@ pnpm --filter @kunlun/windows-admin package:win
 
 产物在 `apps/windows-admin/release/kunlun-admin-setup-<版本>.exe`（约 110 MB，自带浏览器内核，不依赖电脑上的浏览器）。在 macOS、Linux 和 Windows 上都能打包，第一次要下载 Windows 版 Electron 和 NSIS。CI 的 `windows` 任务在 PR 的每个提交和 main 的每次更新时打包，上传为 `windows-admin-installer`；没开 PR 的分支不会自动跑，要在 GitHub 的 Actions 页面选 CI，点「Run workflow」手动跑。
 
-- 连别的服务器：`KUNLUN_DESKTOP_ORIGIN=https://kunlun-test.idalee.cn pnpm --filter @kunlun/windows-admin package:win`。打包时只接受 `https://` 地址；这样打出的是「绿麒麟水站管理端（测试）」（`kunlun-admin-test-setup-*.exe`），可以和正式版装在同一台电脑上。
+- 连别的服务器：`KUNLUN_DESKTOP_ORIGIN=https://kunlun-test.idalee.cn pnpm --filter @kunlun/windows-admin package:win`。打包时只接受 `https://` 地址；这样打出的是「绿麒麟水站管理端（测试）」（`release/test/kunlun-admin-test-setup-*.exe`），可以和正式版装在同一台电脑上。
 - 只要解包目录不要安装包：在命令末尾加 `--unpacked`，结果在 `release/win-unpacked`。
 - 版本号在 `package.json` 的 `version`，每次发新安装包都要加大，覆盖安装才会认作新版本。
+
+## 发布 Windows 更新
+
+CI 同时生成正式环境的 `windows-admin-installer` 和测试环境的 `windows-admin-test-installer`。每份产物包含安装包、同名的 `.exe.blockmap` 和 `latest.yml`。发布前核对清单中的版本与 SHA-512。
+
+在 al 上将对应产物放到正式环境的 `/opt/kunlun/windows-updates/` 或测试环境的 `/opt/kunlun-test/windows-updates/`。先放入带新版本号的安装包与 blockmap，最后在同一文件系统内原子替换 `latest.yml`。保留已发布的旧版本文件供增量下载。网页单独发布时继续挂载同一目录。
+
+客户端读取安装时绑定域名下的 `/downloads/windows/latest.yml`。测试版与正式版分别使用各自的安装目录、更新源和下载缓存。
 
 ## 以后可以加
 
 - **代码签名**：买到代码签名证书后，在 `scripts/package.mjs` 的 `win` 里配上签名，SmartScreen 提示就会消失或变少。
-- **外壳自动更新**：现在外壳很少需要更新，所以没做。需要时可以用 electron-updater，把新安装包放到 al 上，由外壳自己检查和安装。
 - **员工工作台入口**：如果门店电脑也要用 `/staff`，可以在外壳里加一个入口切换。
