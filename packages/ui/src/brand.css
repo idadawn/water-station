@@ -535,3 +535,10 @@ a{color:var(--brand-600);text-decoration:none}
 .opening-add{align-self:flex-start}
 
 .matched-delivery-contact{display:block;white-space:normal;overflow-wrap:anywhere}
+
+.accessory-fields { grid-column: 1 / -1; }
+.accessory-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; }
+.accessory-row + .accessory-row { border-top: 1px solid #e0e8e3; }
+.accessory-row small { display: block; color: #53655b; }
+.accessory-row input { max-width: 74px; }
+.accessory-row select { width: auto; }

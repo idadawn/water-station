@@ -70,7 +70,7 @@ public sealed class ExpenseTests(TestHost host)
         var after = await Summary(admin);
         Assert.Equal(before.GetProperty("expenseTotal").GetDecimal() + 336.50m, after.GetProperty("expenseTotal").GetDecimal());
         Assert.Equal(before.GetProperty("expenseCount").GetInt64() + 2, after.GetProperty("expenseCount").GetInt64());
-        Assert.Equal(after.GetProperty("rechargeNet").GetDecimal() - after.GetProperty("expenseTotal").GetDecimal(), after.GetProperty("balance").GetDecimal());
+        Assert.Equal(after.GetProperty("rechargeNet").GetDecimal() + after.GetProperty("accessoryNet").GetDecimal() - after.GetProperty("expenseTotal").GetDecimal(), after.GetProperty("balance").GetDecimal());
         var parts = after.GetProperty("categories").EnumerateArray().Single(c => c.GetProperty("category").GetString() == "PARTS");
         Assert.True(parts.GetProperty("total").GetDecimal() >= 36.50m);
 

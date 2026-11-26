@@ -11,7 +11,8 @@ public sealed record CreateWaterOrderRequest(
     string IdempotencyKey,
     Guid? AddressId = null,        // delivery address from the member address book; default address when omitted
     string? AppointmentSlot = null,
-    string? Remark = null);
+    string? Remark = null,
+    AccessoryBasket? Accessories = null);
 
 public sealed record CancelWaterOrderRequest(
     string CancelReason);

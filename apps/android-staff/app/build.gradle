@@ -31,8 +31,9 @@ android {
         applicationId 'cn.idalee.kunlun.staff'
         minSdk 26
         targetSdk 36
-        versionCode 7
-        versionName '1.2.4'
+        manifestPlaceholders = [appLabel: '@string/app_name']
+        versionCode 8
+        versionName '1.2.5'
     }
     buildFeatures { buildConfig true }
     signingConfigs {
@@ -54,6 +55,10 @@ android {
             buildConfigField 'String', 'STAFF_ORIGIN', '"http://127.0.0.1:5188"'
         }
         release {
+            if (releaseUri.host == 'kunlun-test.idalee.cn') {
+                applicationIdSuffix '.test'
+                manifestPlaceholders = [appLabel: '绿麒麟员工端（测试）']
+            }
             buildConfigField 'String', 'STAFF_ORIGIN', '"' + releaseOrigin.replaceAll('/$', '') + '"'
             if (releaseSigning) signingConfig signingConfigs.release
         }

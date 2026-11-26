@@ -181,6 +181,7 @@ public static class ReportEndpoints
                 depositDeductCount = r.GetInt64(0);
                 depositDeductedTotal = r.GetDecimal(1);
             }
+            var (accessoryReceived,accessoryRefunded) = await Accessories.Totals(conn,null,tenantId,null,null,ct);
             var netDepositFromFlows = depositOpeningTotal + depositTransferTotal + depositCollectedTotal - depositRefundedTotal - depositDeductedTotal;
 
             // 费用支出：买桶袋、配件耗材、维修等花出去的钱，作废的不算；押金不是收入，所以结余只拿水费净收减支出。
@@ -233,6 +234,8 @@ public static class ReportEndpoints
                 rechargeEarnedTotal = rechargeRevenueTotal - depositTransferTotal - rechargeRefundedTotal + undatedOpeningOut - unusedRechargeValue - datedOpeningUnused,
                 expenseTotal,
                 expenseCount,
+                accessoryReceived, accessoryRefunded,
+                operatingBalance = rechargeRevenueTotal - depositTransferTotal - rechargeRefundedTotal + accessoryReceived - accessoryRefunded - expenseTotal,
                 rechargeNetAfterExpenses = rechargeRevenueTotal - depositTransferTotal - rechargeRefundedTotal - expenseTotal,
                 completedOrderCount,
                 waterFulfilledTotalQty,
@@ -469,7 +472,7 @@ public static class ReportEndpoints
                 r.recharge_no, m.name, m.member_no, r.plan_snapshot->>'name',
                 r.paid_amount, r.buy_qty, r.gift_qty, r.pay_method, r.operator_name, r.received_at, r.plan_snapshot::text,
                 rf.refund_no, rf.amount, rf.created_at,
-                g.status, g.quantity, g.reviewer_name, g.review_note, g.reviewed_at,r.id,r.card_opened_on
+                g.status, g.quantity, g.reviewer_name, g.review_note, g.reviewed_at,r.id,r.card_opened_on,m.id,m.phone,EXISTS(SELECT 1 FROM plugin_kunlun_waterstation.recharge_corrections c WHERE c.recharge_id=r.id)
                 """, """
                 plugin_kunlun_waterstation.water_receipts r
                 JOIN plugin_kunlun_waterstation.members m ON m.id = r.member_id
@@ -490,7 +493,7 @@ public static class ReportEndpoints
                 p.Add(Paging.Like("q", q));
             }, reader => new
             {
-                id = reader.GetGuid(19),
+                id = reader.GetGuid(19), memberId=reader.GetGuid(21), memberPhone=reader.GetString(22), corrected=reader.GetBoolean(23),
                 cardOpenedOn = reader.IsDBNull(20) ? (DateOnly?)null : reader.GetFieldValue<DateOnly>(20),
                 rechargeNo = reader.GetString(0),
                 memberName = reader.GetString(1),

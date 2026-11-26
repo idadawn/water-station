@@ -46,7 +46,7 @@ export function Orders() {
 
   const cancel = (o: WaterOrder) => run(async () => {
     const confirmed = await dialogs.open<boolean>(close => <ConfirmDialog title="取消水单" confirmLabel="确认取消" onClose={close}
-      message={`确定取消水单 ${o.orderNo} 吗？取消后预占水票将释放回可用余额。`}
+      message={`确定取消水单 ${o.orderNo} 吗？取消后预占水票将释放回可用余额。${o.accessorySale?.status === 'PAID' ? '配件已收款，如需退货请在配件销售流水办理退款。' : o.accessorySale?.status === 'PENDING' ? '随单配件待收款也将取消。' : ''}`}
       onConfirm={() => api.cancelOrder(o.id, '管理员取消水单并释放预占水票').then(() => undefined)} />);
     if (confirmed) { toast(`水单 ${o.orderNo} 已取消，预占水票已释放回可用余额`); await refresh(); }
   })();

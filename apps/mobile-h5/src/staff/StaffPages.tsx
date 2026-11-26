@@ -1,6 +1,6 @@
 import { KUNLUN_BRAND, KUNLUN_PERMISSIONS as P, ROLE_LABELS, containerKind, containerLabel, isActiveOrder, money, shortDateTime, ticketGroups, type ContainerSummaryItem, type MobileFeature, type StaffRole, type WaterOrder } from '@kunlun/shared';
 import {
-  ChangePasswordDialog, CounterOrder, Icon, SearchInput, MatchedDeliveryContacts, OrderCard, StockEditDialog, StockQuickDialog, WorkbenchHome, useAuth, useDialogs, useRun,
+  AccessorySettlement, ChangePasswordDialog, CounterOrder, Icon, SearchInput, MatchedDeliveryContacts, OrderCard, StockEditDialog, StockQuickDialog, WorkbenchHome, useAuth, useDialogs, useRun,
   type StockCount,
 } from '@kunlun/ui';
 import { AndroidAppVersion, Loading } from '../shared/H5Shell';
@@ -10,16 +10,20 @@ import { useStaffOperations } from './operations';
 export interface StaffPageProps { go: (page: string) => void }
 
 function StaffOrder({ order }: { order: WaterOrder }) {
-  const { members } = useStaffData();
+  const { members,refresh } = useStaffData();
+  const dialogs=useDialogs();
+  const sale=order.accessorySale;
   const { can } = useAuth();
   const ops = useStaffOperations();
   const title = members.find(m => m.id === order.memberId)?.name || order.addressSnapshot?.contactName || '会员';
   const accept = order.status === 'PENDING' && order.fulfillMode === 'DELIVERY' && can(P.OrderAccept);
   return (
-    <OrderCard order={order} title={title} showContact actions={isActiveOrder(order) && <>
+    <OrderCard order={order} title={title} showContact actions={<>
+      {sale?.status==='PENDING' && (can(P.OrderCreate) || can(P.OrderFulfill) || can(P.OrderAccept)) && <button type="button" className="btn sm" onClick={()=>dialogs.open(close=><AccessorySettlement sale={sale} action="collect" onClose={close} onDone={refresh}/>)}>收配件款 ¥{money(sale.amount)}</button>}
+      {isActiveOrder(order) && <>
       {accept && <button type="button" className="btn sm" onClick={() => ops.accept(order)}>接单</button>}
       {can(P.OrderFulfill) && <button type="button" className="btn primary sm" onClick={() => ops.fulfill(order)}>{order.fulfillMode === 'PICKUP' ? '核销自提' : '确认交付'}</button>}
-    </>} />
+    </>}</>} />
   );
 }
 

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
   PAY_METHODS, dateFilterRange, modeLabel, money, payMethodLabel, shortDateTime, unitOf, waterFallbackLabel,
-  type DateFilter, type GiftReview, type PayMethod, type RechargeLedgerQuery, type RechargeLedgerRow, type RechargeRefundLedgerRow,
+  type MemberProfile, type DateFilter, type GiftReview, type PayMethod, type RechargeLedgerQuery, type RechargeLedgerRow, type RechargeRefundLedgerRow,
 } from '@kunlun/shared';
-import { SearchInput, Dialog, Icon, useAuth, useDialogs } from '@kunlun/ui';
+import { Field, FormDialog, MemberPicker, useIdempotencyKey, useLoader, SearchInput, Dialog, Icon, useAuth, useDialogs } from '@kunlun/ui';
 import { DateFilterSelect, EmptyRow, Pager, StatCard, handledBy, ledgerEmptyText, useDebounced, useExport, useLedger, useOperations } from '../common';
 import { useAdminData } from '../data';
 
@@ -63,6 +63,7 @@ export function Recharges() {
 function RechargeTable({ filter, filtered }: { filter: RechargeLedgerQuery; filtered: boolean }) {
   const { api } = useAuth();
   const dialogs = useDialogs();
+  const { refresh } = useAdminData();
   const table = useLedger((query: RechargeLedgerQuery) => api.rechargeLedger(query), filter);
   const rows = table.data?.rows ?? [];
   return (
@@ -81,9 +82,11 @@ function RechargeTable({ filter, filtered }: { filter: RechargeLedgerQuery; filt
                   <td><b>¥ {money(r.paidAmount)}</b></td>
                   <td><b>{r.cardOpenedOn && '套餐共 '}{r.buyQty + r.giftQty} {unit}</b><br /><small>付费 {r.buyQty}{r.giftQty > 0 ? ` + 赠送 ${r.giftQty}` : ''}</small>{waitingGift(r.giftReview, unit)}</td>
                   <td>{payMethodLabel(r.payMethod)}</td>
-                  <td>{r.refundNo ? <span className="tag orange">已退 ¥{money(r.refundAmount ?? 0)}</span> : <span className="tag green">{r.cardOpenedOn ? '补录开卡' : '已到账'}</span>}</td>
+                  <td>{r.refundNo ? <span className="tag orange">已退 ¥{money(r.refundAmount ?? 0)}</span> : <span className="tag green">{r.cardOpenedOn ? '补录开卡' : r.corrected ? '已更正到账' : '已到账'}</span>}</td>
                   <td>{r.operatorName}</td>
-                  <td><button type="button" className="link" onClick={() => dialogs.open(close => <RechargeDetailDialog row={r} onClose={close} />)}>详情</button></td>
+                  <td><button type="button" className="link" onClick={() => dialogs.open(close => <RechargeDetailDialog row={r} onClose={close} />)}>详情</button>
+                    {!r.cardOpenedOn && !r.refundNo && <button type="button" className="link" onClick={() => dialogs.open(close =>
+                      <CorrectionDialog row={r} onClose={close} onDone={refresh} />)}>更正会员</button>}</td>
                 </tr>
               );
             })}
@@ -149,7 +152,34 @@ function RechargeDetailDialog({ row: r, onClose }: { row: RechargeLedgerRow; onC
         <div className="detail-row"><span>经办人</span><b>{r.operatorName}</b></div>
         {r.refundNo && <div className="detail-row"><span>退清剩余权益</span><b>{r.refundNo} · 退 ¥{money(r.refundAmount ?? 0)}{r.refundedAt ? ` · ${shortDateTime(r.refundedAt)}` : ''}</b></div>}
       </div>
+      {r.corrected && <CorrectionHistory id={r.id} />}
       <p className="membership-note">套餐信息为办理时快照；押金不在充值中收取，另在「押金管理」办理。</p>
     </Dialog>
   );
+}
+
+function CorrectionHistory({ id }: { id: string }) {
+  const { api } = useAuth();
+  const history = useLoader(() => api.rechargeCorrections(id), [api,id]);
+  return <section><h4>到账会员更正记录</h4>{history.error && <p role="alert">{history.error}</p>}
+    {history.data?.map((c,i) => <p key={i}>{c.fromName}（{c.fromNo}） → {c.toName}（{c.toNo}）<br />
+      {shortDateTime(c.createdAt)} · {c.actor} · {c.reason}</p>)}</section>;
+}
+
+function CorrectionDialog({ row, onClose, onDone }: { row: RechargeLedgerRow; onClose(): void; onDone(): Promise<void> }) {
+  const { api } = useAuth();
+  const key = useIdempotencyKey();
+  const [target,setTarget] = useState<MemberProfile | null>(null);
+  const [reason,setReason] = useState('');
+  return <FormDialog title="更正充值到账会员" description={row.rechargeNo} onClose={onClose} submitLabel="确认整笔转入" onSubmit={async () => {
+    if (!target || target.id === row.memberId) throw new Error('请选择与原会员不同的转入会员');
+    await api.correctRecharge(row.id,{ fromMemberId: row.memberId, toMemberId: target.id, reason, idempotencyKey:key });
+    await onDone();
+  }}>
+    <span>原到账会员</span><b>{row.memberName} · {row.memberPhone} · {row.memberNo}</b>
+    <span>整笔更正</span><span>{row.planName} · ¥{money(row.paidAmount)} · 付费 {row.buyQty} 张 + 赠票 {row.giftQty} 张</span>
+    <Field label="转入会员" htmlFor="correct-target"><MemberPicker id="correct-target" value={target} onChange={setTarget} /></Field>
+    <Field label="更正原因" htmlFor="correct-reason"><input className="input" id="correct-reason" required maxLength={500} value={reason} onChange={e=>setReason(e.target.value)} /></Field>
+    {target && <label key={target.id} className="membership-note"><input required type="checkbox" /> 已核对转入会员 {target.name} · {target.phone}</label>}
+  </FormDialog>;
 }

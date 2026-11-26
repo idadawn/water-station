@@ -10,3 +10,4 @@ export * from './ordering';
 export * from './operations';
 export * from './workbench';
 export * from './search-input';
+export * from './accessories';

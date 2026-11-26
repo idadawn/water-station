@@ -167,6 +167,7 @@ export interface OrderProductSnapshot {
 }
 
 export interface WaterOrder {
+  accessorySale?: Pick<AccessorySale,'id'|'saleNo'|'items'|'amount'|'status'|'payMethod'> | null;
   id: string;
   orderNo: string;
   memberId: string;
@@ -190,7 +191,23 @@ export interface WaterOrder {
   overrideReason?: string | null;
 }
 
+export interface AccessoryProduct { id: string; name: string; unit: string; price: number; active: boolean }
+export interface AccessoryItem { productId: string; price: number; quantity: number }
+export interface AccessoryBasket { items: AccessoryItem[]; payment: PayMethod | 'COD' }
+export type AccessoryStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'VOID';
+export interface AccessorySale {
+  id: string; saleNo: string; items: (AccessoryItem & { name: string; unit: string })[];
+  amount: number; status: AccessoryStatus; operatorName: string; createdAt: string;
+  memberName: string | null; orderNo: string | null; address: string | null;
+  payMethod: PayMethod | null; paidBy: string | null; paidAt: string | null;
+  refundMethod: PayMethod | null; refundedBy: string | null; refundedAt: string | null; refundReason: string | null;
+}
+export interface RechargeCorrection {
+  fromName: string; fromNo: string; toName: string; toNo: string; actor: string; reason: string; createdAt: string;
+}
+
 export interface CreateOrderRequest {
+  accessories?: AccessoryBasket;
   memberId: string;
   waterType: WaterType;
   fulfillMode: FulfillMode;
@@ -364,6 +381,7 @@ export interface PlanSnapshot {
 }
 
 export interface RechargeLedgerRow {
+  memberId: string; memberPhone: string; corrected: boolean;
   id: string;
   cardOpenedOn: string | null;
   rechargeNo: string;
@@ -1078,6 +1096,7 @@ export interface ExpenseSummary {
   rechargeRevenue: number;
   openingRevenue: number;
   rechargeRefunded: number;
+  accessoryReceived: number; accessoryRefunded: number; accessoryNet: number;
   rechargeNet: number;
   balance: number;
 }

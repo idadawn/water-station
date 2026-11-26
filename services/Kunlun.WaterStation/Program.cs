@@ -156,6 +156,8 @@ using (var scope = app.Services.CreateScope())
     await Expenses.EnsureSchema(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), repo.DefaultTenantId);
     await MemberOpening.EnsureSchema(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), repo.DefaultTenantId);
     await MemberStatus.EnsureSchema(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>(), repo.DefaultTenantId);
+    await RechargeCorrections.EnsureSchema(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>());
+    await Accessories.EnsureSchema(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>());
     await Settlements.EnsureSchema(scope.ServiceProvider.GetRequiredService<NpgsqlDataSource>());
 }
 
@@ -291,6 +293,8 @@ app.MapFinanceEndpoints();
 app.MapContainerInventory();
 app.MapContainerCirculation();
 app.MapMembershipEndpoints();
+app.MapRechargeCorrections();
+app.MapAccessories();
 app.MapMemberOpening();
 app.MapMemberStatus();
 app.MapRefundRequests();
