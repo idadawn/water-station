@@ -10,7 +10,7 @@ using Xunit;
 namespace Kunlun.WaterStation.Tests;
 
 [Collection("KunlunIntegration")]
-public sealed class MembershipTests(TestHost host)
+public sealed partial class MembershipTests(TestHost host)
 {
     private static string Key() => Guid.NewGuid().ToString("N");
     private static async Task<JsonElement> Ok(HttpResponseMessage response)

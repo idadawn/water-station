@@ -99,6 +99,7 @@ public static class OrderEndpoints
                         idempotentReplay = true
                     };
                     await r.CloseAsync();
+                    await Accessories.CheckReplay(conn,tx,orderRepo.TenantId,existingResp.id,req.MemberId,req.Accessories,ct);
                     await tx.CommitAsync(ct);
                     return Results.Ok(existingResp);
                 }
@@ -197,6 +198,9 @@ public static class OrderEndpoints
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
 
+            if (req.Accessories is { } basket)
+                await Accessories.Create(conn,tx,orderRepo.TenantId,req.MemberId,orderId,basket,"order:"+req.IdempotencyKey,req.FulfillMode=="DELIVERY",actorName,ct);
+
             await TicketBatches.Reserve(conn, tx, orderRepo.TenantId, req.MemberId, req.WaterType, req.FulfillMode, orderId, req.OrderQty, ct);
             // 写入水票预占流水 ORDER_RESERVE
             await using (var lCmd = new NpgsqlCommand("""
@@ -271,9 +275,11 @@ public static class OrderEndpoints
             return await Paging.From(page, pageSize, legacyLimit: 50).Query(conn, """
                 o.id, o.order_no, o.member_id, o.water_type, o.fulfill_mode, o.order_qty, o.reserved_qty,
                 o.actual_qty, o.full_out_qty, o.empty_in_qty, o.pickup_code, o.address_snapshot,
-                o.status, o.diff_reason, o.cancel_reason, o.created_at, o.product_snapshot, o.remark, o.override_reason
+                o.status, o.diff_reason, o.cancel_reason, o.created_at, o.product_snapshot, o.remark, o.override_reason,
+                CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'saleNo',s.sale_no,'items',s.items,'amount',s.amount,'status',s.status,'payMethod',s.pay_method)::text END
                 """, """
                 plugin_kunlun_waterstation.water_orders o
+                LEFT JOIN plugin_kunlun_waterstation.accessory_sales s ON s.order_id=o.id AND s.tenant_id=o.tenant_id
                 WHERE o.tenant_id = @tid
                   AND (@mid IS NULL OR o.member_id = @mid)
                   AND (@st IS NULL OR o.status = @st)
@@ -316,6 +322,7 @@ public static class OrderEndpoints
                 createdAt = r.GetDateTime(15),
                 productSnapshot = r.IsDBNull(16) ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(r.GetString(16)),
                 remark = r.IsDBNull(17) ? null : r.GetString(17),
+                accessorySale = r.IsDBNull(19) ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(r.GetString(19)),
                 overrideReason = r.IsDBNull(18) ? null : r.GetString(18)
             }, ct);
         }).RequireAuthorization();
@@ -414,6 +421,7 @@ public static class OrderEndpoints
                 await lCmd.ExecuteNonQueryAsync(ct);
             }
 
+            await TicketBatches.Exec(conn, tx, "UPDATE plugin_kunlun_waterstation.accessory_sales SET status='VOID' WHERE tenant_id=@tid AND order_id=@id AND status='PENDING'", ct, ("tid",orderRepo.TenantId),("id",orderId));
             await tx.CommitAsync(ct);
 
             return Results.Ok(new

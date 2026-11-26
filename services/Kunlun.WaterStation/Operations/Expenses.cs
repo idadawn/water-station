@@ -309,6 +309,8 @@ public static class Expenses
         cmd.Parameters.Add(Paging.Time("to", to));
         using var doc = JsonDocument.Parse((string)(await cmd.ExecuteScalarAsync(ct))!);
         var root = doc.RootElement;
+        var (accessoryReceived,accessoryRefunded) = await Accessories.Totals(conn,tx,tenantId,from,to,ct);
+        var accessoryNet = accessoryReceived-accessoryRefunded;
         var expense = root.GetProperty("expenseTotal").GetDecimal();
         var receipts = root.GetProperty("receipts");
         var revenue = receipts.GetProperty("total").GetDecimal();
@@ -330,7 +332,8 @@ public static class Expenses
             rechargeRefunded = refunded,
             transferred,
             rechargeNet = revenue - refunded - transferred,
-            balance = revenue - refunded - transferred - expense
+            accessoryReceived, accessoryRefunded, accessoryNet,
+            balance = revenue - refunded - transferred + accessoryNet - expense
         };
     }
 }

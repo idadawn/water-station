@@ -163,7 +163,9 @@ public static class MemberStatus
                    (SELECT count(*) FROM plugin_kunlun_waterstation.ticket_batches WHERE tenant_id=@tid AND member_id=@mid),
                    EXISTS(SELECT 1 FROM plugin_kunlun_waterstation.member_tickets WHERE tenant_id=@tid AND member_id=@mid AND available+reserved>0)
                      OR EXISTS(SELECT 1 FROM plugin_kunlun_waterstation.member_container_holdings WHERE tenant_id=@tid AND member_id=@mid AND quantity>0)
-                     OR EXISTS(SELECT 1 FROM plugin_kunlun_waterstation.members WHERE tenant_id=@tid AND id=@mid AND (deposit_amount>0 OR held_buckets+held_bags>0))
+                     OR EXISTS(SELECT 1 FROM plugin_kunlun_waterstation.members WHERE tenant_id=@tid AND id=@mid AND (deposit_amount>0 OR held_buckets+held_bags>0)),
+                   (SELECT count(*) FROM plugin_kunlun_waterstation.accessory_sales WHERE tenant_id=@tid AND member_id=@mid),
+                   (SELECT count(*) FROM plugin_kunlun_waterstation.recharge_corrections WHERE tenant_id=@tid AND (from_member=@mid OR to_member=@mid))
             """, ("tid", tid), ("mid", mid));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         await r.ReadAsync(ct);
@@ -175,6 +177,8 @@ public static class MemberStatus
         Add(3, "条桶袋领还记录");
         Add(4, "次补录");
         Add(5, "笔退款或报损");
+        Add(8, "笔配件销售");
+        Add(9, "笔充值更正");
         // Recharges carry their own ticket batches; batches without one are history balances or packages from before the system.
         if (list.Count == 0) Add(6, "个水票批次");
         if (list.Count == 0 && r.GetBoolean(7)) list.Add("水票、押金或桶袋余额");

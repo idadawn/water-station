@@ -43,14 +43,16 @@ function PeriodFigures({ period, range: custom, metric, setMetric }: { period: O
       <section className="cash-balance">
         <h3>{periods[period]}收支结余</h3>
         <strong><small>¥</small> {yuan(cash.balance)}</strong>
-        <p>水费净收减去已登记费用，含会员预付水费。</p>
-        <dl><div><dt>水费净收</dt><dd>¥ {yuan(cash.rechargeNet)}</dd></div><div><dt>费用支出</dt><dd>¥ {yuan(cash.expenseTotal)}</dd></div></dl>
+        <p>水费净收加配件净收入，再减去已登记费用。</p>
+        <dl><div><dt>水费净收</dt><dd>¥ {yuan(cash.rechargeNet)}</dd></div><div><dt>配件净收入</dt><dd>¥ {yuan(cash.accessoryNet)}</dd></div><div><dt>费用支出</dt><dd>¥ {yuan(cash.expenseTotal)}</dd></div></dl>
       </section>
       <section className="card cash-breakdown">
         <div className="card-head"><h3 className="card-title">收支构成</h3><button type="button" className="text-btn" onClick={() => go('expenses')}>费用支出台账 ›</button></div>
         <dl>
           <div><dt>水费实收</dt><dd>¥ {yuan(cash.rechargeRevenue)}</dd></div>
           {cash.openingRevenue > 0 && <div><dt>其中补录开卡水费</dt><dd>¥ {yuan(cash.openingRevenue)}</dd></div>}
+          <div><dt><a href={`/admin/accessories?start=${start}&end=${end}`}>配件实收 ›</a></dt><dd>¥ {yuan(cash.accessoryReceived)}</dd></div>
+          <div><dt>配件退款</dt><dd>¥ {yuan(cash.accessoryRefunded)}</dd></div>
           <div><dt>水费退款</dt><dd>¥ {yuan(cash.rechargeRefunded)}</dd></div>
           <div><dt>水费转押金</dt><dd>¥ {yuan(cash.transferred)}</dd></div>
           <div><dt>费用支出 <small>{cash.expenseCount} 笔</small></dt><dd>¥ {yuan(cash.expenseTotal)}</dd></div>

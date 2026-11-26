@@ -1,3 +1,4 @@
+import type { AccessoryBasket, AccessoryProduct, AccessorySale, AccessoryStatus, RechargeCorrection } from './types';
 import type { CalendarRange } from './format';
 import type {
   ActiveStatus,
@@ -140,6 +141,24 @@ export class KunlunApi {
   private put<T>(path: string, body?: unknown) {
     return this.request<T>(path, { method: 'PUT', ...(body === undefined ? {} : json(body)) });
   }
+
+  accessoryProducts(all = false) { return this.request<AccessoryProduct[]>('/api/accessories/products' + (all ? '?all=true' : '')); }
+  saveAccessory(id: string | undefined, body: Omit<AccessoryProduct, 'id'>) {
+    return id ? this.put<{id: string}>(`/api/accessories/products/${id}`, body) : this.post<{id: string}>('/api/accessories/products', body);
+  }
+  sellAccessories(body: { memberId?: string; idempotencyKey: string; basket: AccessoryBasket }) {
+    return this.post<{id: string}>('/api/accessories/sales', body);
+  }
+  accessorySales(query: { status?: AccessoryStatus; from?: string; to?: string; page?: number } = {}) {
+    return this.request<Paged<AccessorySale>>('/api/accessories/sales' + paged(query));
+  }
+  settleAccessory(id: string, action: 'collect' | 'refund', body: { payMethod: PayMethod; reason?: string }) {
+    return this.post<void>(`/api/accessories/sales/${id}/${action}`,body);
+  }
+  correctRecharge(id: string, body: { fromMemberId: string; toMemberId: string; reason: string; idempotencyKey: string }) {
+    return this.post<void>(`/api/recharges/${id}/corrections`,body);
+  }
+  rechargeCorrections(id: string) { return this.request<RechargeCorrection[]>(`/api/recharges/${id}/corrections`); }
 
   // Auth & accounts
   staffLogin(account: string, password: string, requireAdmin = false) {

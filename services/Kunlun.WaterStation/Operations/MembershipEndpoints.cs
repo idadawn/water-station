@@ -138,7 +138,7 @@ public static class MembershipEndpoints
         await LockRequest(conn, tx, tid, "recharge", req.IdempotencyKey, ct);
         await LockMember(conn, tx, tid, req.MemberId, ct);
         await using (var cmd = Command(conn, tx, """
-            SELECT r.id,r.recharge_no,r.paid_amount,r.buy_qty,r.gift_qty,r.plan_snapshot::text,r.member_id,r.plan_id,r.pay_method,r.manual_gift_qty,g.quantity,g.request_no
+            SELECT r.id,r.recharge_no,r.paid_amount,r.buy_qty,r.gift_qty,r.plan_snapshot::text,COALESCE((SELECT c.from_member FROM plugin_kunlun_waterstation.recharge_corrections c WHERE c.recharge_id=r.id ORDER BY seq LIMIT 1),r.member_id),r.plan_id,r.pay_method,r.manual_gift_qty,g.quantity,g.request_no
             FROM plugin_kunlun_waterstation.recharge_orders r
             LEFT JOIN plugin_kunlun_waterstation.refund_requests g ON g.batch_id=r.id AND g.kind='GIFT' AND g.status='PENDING'
             WHERE r.tenant_id=@tid AND r.idempotency_key=@key
@@ -224,6 +224,8 @@ public static class MembershipEndpoints
             if (r.GetGuid(2) != id || r.GetString(6) != req.PayMethod || r.GetString(7) != req.Reason.Trim()) throw new BusinessRuleException("请求标识已用于其他退款", 409);
             return Results.Ok(new { id = r.GetGuid(0), refundNo = r.GetString(1), refundAmount = r.GetDecimal(3), refundBuyQty = r.GetInt32(4), revokedGiftQty = r.GetInt32(5), idempotentReplay = true });
         }
+        await using (var owner = Command(conn, tx, "SELECT member_id FROM plugin_kunlun_waterstation.ticket_batches WHERE tenant_id=@tid AND id=@id", ("tid",tid), ("id",id)))
+            if (!mid.Equals(await owner.ExecuteScalarAsync(ct))) throw new BusinessRuleException("充值归属已变更，请刷新后重试",409);
         var refund = await ExecuteRechargeRefund(conn, tx, tid, id, req.PayMethod, req.Reason.Trim(), req.IdempotencyKey, Actor(user), ct);
         await RefundRequests.RecordDirect(conn, tx, tid, "RECHARGE", mid, null, null, id, req.PayMethod, req.Reason.Trim(), refund.RefundNo, refund.Amount, Actor(user), ct);
         await tx.CommitAsync(ct); return Results.Ok(new { id = refund.Id, refundNo = refund.RefundNo, refundAmount = refund.Amount, refundBuyQty = refund.BuyQty, revokedGiftQty = refund.GiftQty, idempotentReplay = false });
@@ -295,6 +297,6 @@ public static class MembershipEndpoints
             """, ct, ("actor", actor), ("tid", tid), ("id", id));
         return new RechargeRefundResult(rid, no, amount, buy, gift);
     }
-    private static Task<int> Ledger(NpgsqlConnection conn, NpgsqlTransaction tx, Guid tid, Guid mid, string water, string mode, string kind, int delta, int balance, string no, string actor, CancellationToken ct) =>
+    internal static Task<int> Ledger(NpgsqlConnection conn, NpgsqlTransaction tx, Guid tid, Guid mid, string water, string mode, string kind, int delta, int balance, string no, string actor, CancellationToken ct) =>
         Exec(conn, tx, "INSERT INTO plugin_kunlun_waterstation.ticket_ledgers(tenant_id,ledger_no,member_id,water_type,fulfill_mode,change_type,delta_qty,balance_after,ref_no,operator_name) VALUES(@tid,@no,@mid,@water,@mode,@kind,@delta,@balance,@ref,@actor)", ct, ("tid", tid), ("no", Number("TL")), ("mid", mid), ("water", water), ("mode", mode), ("kind", kind), ("delta", delta), ("balance", balance), ("ref", no), ("actor", actor));
 }

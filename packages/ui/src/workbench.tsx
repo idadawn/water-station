@@ -3,6 +3,7 @@ import {
   KUNLUN_BRAND, containerLabel, isActiveOrder, mobileLayout, money, orderStatusLabel, waterFallbackLabel,
   type ContainerSummaryItem, type MobileFeature, type MobileFeatureKey, type OverviewReport, type WaterOrder,
 } from '@kunlun/shared';
+import { accessoryStatus } from './accessories';
 import { Icon, type IconName } from './icons';
 
 /*
@@ -57,6 +58,7 @@ export function OrderCard({ order, title, showContact = false, showPickupCode = 
       {showContact && delivery && snapshot?.contactPhone && (
         <div className="h5-address"><Icon name="phone" />收货人 {snapshot.contactName} <a href={`tel:${snapshot.contactPhone}`}>{snapshot.contactPhone}</a></div>
       )}
+      {order.accessorySale && <div className="h5-address">随单配件 · {order.accessorySale.items.map(i=>i.name+' × '+i.quantity+i.unit).join('、')} · ¥{money(order.accessorySale.amount)} · {accessoryStatus[order.accessorySale.status]}</div>}
       {order.remark && <div className="h5-address">备注：{order.remark}</div>}
       <div className="h5-order-foot">
         <small>{active ? `预占 ${order.reservedQty} 张` : `实取 ${order.actualQty || 0} 张`}</small>

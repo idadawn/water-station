@@ -54,7 +54,7 @@ export function Expenses() {
       <StatCard label={`水费净收 · ${period}`} icon="wallet" tone="blue" value={s ? `¥ ${money(s.rechargeNet)}` : '—'}
         foot={s ? `实收 ¥${money(s.rechargeRevenue)}（含补录开卡 ¥${money(s.openingRevenue)}）− 退款 ¥${money(s.rechargeRefunded)} − 转押金 ¥${money(s.transferred)}` : '同期水费实收 − 退款'} />
       <StatCard label={`结余 · ${period}`} icon="refund" value={s ? <span className={s.balance < 0 ? 'amount-out' : undefined}>¥ {money(s.balance)}</span> : '—'}
-        foot="水费净收 − 费用支出；其中还有会员没用完的水费，可能要退" />
+        foot="水费净收 + 配件净收入 − 费用支出，含会员预付水费" />
     </div>
     <div className="filter-card">
       <label className="field-search"><Icon name="search" /><SearchInput placeholder="搜索单号、买了什么、备注或经办人" aria-label="搜索支出" value={query} onSearch={setQuery} /></label>
