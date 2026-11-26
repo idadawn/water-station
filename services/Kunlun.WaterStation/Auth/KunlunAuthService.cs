@@ -21,6 +21,7 @@ public static class KunlunPermissions
     public const string DepositCollect = "kunlun.waterstation:deposit:collect";
     public const string DepositRefundApply = "kunlun.waterstation:deposit:refund_apply";
     public const string DepositRefundApprove = "kunlun.waterstation:deposit:refund_approve";
+    public const string AccessorySell = "kunlun.waterstation:accessory:sell";
     public const string OrderCreate = "kunlun.waterstation:order:create";
     public const string OrderAccept = "kunlun.waterstation:order:accept";
     public const string OrderFulfill = "kunlun.waterstation:order:fulfill";
@@ -35,14 +36,14 @@ public static class KunlunPermissions
     public static readonly string[] AdminAll =
     [
         MemberRead, MemberWrite, MemberOpening, MemberManage, RechargeCreate, RechargeRefund, DepositCollect,
-        DepositRefundApply, DepositRefundApprove, OrderCreate, OrderAccept,
+        DepositRefundApply, DepositRefundApprove, AccessorySell, OrderCreate, OrderAccept,
         OrderFulfill, PickupVerify, ContainerRegister, ContainerInventoryManage, PlanManage, ReportExport, StaffManage, ExpenseManage
     ];
 
     public static readonly string[] ClerkDefault =
     [
         MemberRead, MemberWrite, RechargeCreate, DepositCollect,
-        DepositRefundApply, OrderCreate, OrderAccept, OrderFulfill,
+        DepositRefundApply, AccessorySell, OrderCreate, OrderAccept, OrderFulfill,
         PickupVerify, ContainerRegister
     ];
 

@@ -16,11 +16,11 @@ export const STAFF_ROLES: ReadonlyArray<{ role: StaffRole; label: string; hint: 
 export const ROLE_LABELS: Readonly<Record<StaffRole, string>> = { ADMIN: '管理员', CLERK: '店员', COURIER: '送水员' };
 
 export type MobileFeatureKey =
-  | 'order' | 'orders' | 'pickup' | 'members' | 'newMember' | 'recharge'
+  | 'accessories' | 'order' | 'orders' | 'pickup' | 'members' | 'newMember' | 'recharge'
   | 'depositCollect' | 'depositRefund' | 'movement' | 'inventory' | 'overview';
 
 /** Staff app pages a feature opens; the bottom tab bar holds the first few of them. */
-export type MobilePage = 'order' | 'orders' | 'members' | 'inventory';
+export type MobilePage = 'accessories' | 'order' | 'orders' | 'members' | 'inventory';
 
 export type MobileTone = '' | 'aqua' | 'gold' | 'orange' | 'violet' | 'blue';
 
@@ -49,6 +49,11 @@ export const MOBILE_FEATURES: readonly MobileFeature[] = [
     key: 'order', label: '门店点单', tab: '点单', icon: 'drop', tone: 'aqua', group: '日常业务', page: 'order',
     summary: '找到顾客后选水下单：到店取水当场交付、收需补押金，送水上门生成待送水单',
     permissions: [P.MemberRead, P.OrderCreate, P.OrderFulfill, P.DepositCollect],
+  },
+  {
+    key: 'accessories', label: '配件销售', tab: '配件', icon: 'tag', tone: 'gold', group: '日常业务', page: 'accessories',
+    summary: '给散客或会员单独销售配件，登记数量、售价和实收款',
+    permissions: [P.MemberRead, P.AccessorySell],
   },
   {
     key: 'orders', label: '水单履约', tab: '水单', icon: 'truck', tone: 'orange', group: '日常业务', page: 'orders',

@@ -19,7 +19,7 @@ public enum StaffResource: Equatable, Sendable {
 public enum StaffRoutes {
     public static let scheme = "kunlun-staff"
     public static let host = "localhost"
-    public static let pages: Set<String> = ["/staff", "/staff/home", "/staff/order", "/staff/orders", "/staff/members", "/staff/inventory", "/staff/profile"]
+    public static let pages: Set<String> = ["/staff", "/staff/home", "/staff/order", "/staff/accessories", "/staff/orders", "/staff/members", "/staff/inventory", "/staff/profile"]
     public static let start = URL(string: "kunlun-staff://localhost/staff")!
 
     public static func resource(for url: URL) -> StaffResource? {

@@ -1,5 +1,4 @@
 import { Stepper } from './stepper';
-import { AccessoryOnly, AccessoryPicker, accessoryAmount, emptyBasket } from './accessories';
 import { SearchInput } from './search-input';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
@@ -347,9 +346,6 @@ export function OrderMenu({ member, products, counter = false, initialMode = 'DE
   const confirmDeposit = useConfirmDepositReceived();
   const review = useReviewSettings();
   const [mode, setMode] = useState(initialMode);
-  const [basket,setBasket] = useState(emptyBasket);
-  const [confirmed,setConfirmed] = useState(false);
-  const [linkedWater,setLinkedWater] = useState<WaterType | null>(null);
   const [cart, setCart] = useState<Partial<Record<WaterType, number>>>({});
   const [step, setStep] = useState<'menu' | 'checkout' | 'done'>('menu');
   const [addressId, setAddressId] = useState<string | null>(null);
@@ -418,12 +414,10 @@ export function OrderMenu({ member, products, counter = false, initialMode = 'DE
   else if (!positions && !deposits.error) blocker = '正在核对押金…';
   else if (step === 'checkout' && handOver) blocker = lines.map(l => handoverProblem(l.choice, l.collected ? 0 : l.gap, l.unit, l.emptyIn)).find(Boolean) ?? '';
 
-  if (step === 'checkout' && basket.items.length && basket.payment !== 'COD' && !confirmed) blocker ||= '请确认配件款已收到';
 
   const submit = async () => {
     if (busy || blocker) return;
     setBusy(true); setError('');
-    const accessoryWater = linkedWater ?? lines[0]?.water;
     // Ask before anything is created; a retry asks only about deposits this checkout has not taken yet.
     const collecting = lines.filter(l => l.paid > 0);
 
@@ -440,11 +434,9 @@ export function OrderMenu({ member, products, counter = false, initialMode = 'DE
         let p = progress.current.get(line.water);
         if (!p) { p = { key: newRequestKey() }; progress.current.set(line.water, p); }
         p.order ??= await api.createOrder({
-          ...(basket.items.length && line.water === accessoryWater ? { accessories: basket } : {}),
           memberId: member.id, waterType: line.water, fulfillMode: mode, orderQty: line.qty, idempotencyKey: p.key,
           addressId: delivery ? addressId : null, appointmentSlot: delivery ? slot : null, remark: remark.trim() || null,
         });
-        if (basket.items.length && line.water === accessoryWater) setLinkedWater(accessoryWater);
         let damagePending = false;
         if (handOver) {
           if (line.paid > 0 && !p.deposit) {
@@ -476,15 +468,14 @@ export function OrderMenu({ member, products, counter = false, initialMode = 'DE
     }
   };
 
-  const again = () => { setBasket(emptyBasket()); setConfirmed(false); setLinkedWater(null); setPlaced([]); setReturns({}); setChoices({}); setRemark(''); setStep('menu'); };
-  const clearCart = () => { setBasket(emptyBasket()); setConfirmed(false); setLinkedWater(null); setCart({}); setReturns({}); setChoices({}); setError(''); };
+  const again = () => { setPlaced([]); setReturns({}); setChoices({}); setRemark(''); setStep('menu'); };
+  const clearCart = () => { setCart({}); setReturns({}); setChoices({}); setError(''); };
 
   if (step === 'done') return (
     <div className="order-menu" ref={top}>
       <div className="order-done">
         <span className="order-done-icon"><Icon name="check" size="lg" /></span>
         <h3>{placed.every(o => o.handedOver) ? '已交付，欢迎再来' : delivery ? '下单成功，等待送水' : '下单成功，请到店取水'}</h3>
-        {basket.items.length > 0 && <p>配件款 ¥{money(accessoryAmount(basket))} · {basket.payment === 'COD' ? '送达时收取' : '已收款'}</p>}
         {placed.map(o => (
           <div key={o.id} className="order-done-line">
             <span><b>{o.name} × {o.orderQty}{unitOf(o.waterType)}</b><small>{o.orderNo}</small></span>
@@ -572,12 +563,7 @@ export function OrderMenu({ member, products, counter = false, initialMode = 'DE
           })}
         {!handOver && depositTotal > 0 && <p className="membership-note">按实际交接数量核对押金，欠押金也可以下单。</p>}
       </section>
-      {counter && <details className="checkout-card" open={basket.items.length > 0 || undefined}>
-        <summary>随单购买配件{basket.items.length > 0 && ' · ¥'+money(accessoryAmount(basket))}</summary>
-        <fieldset disabled={busy || started || placed.length > 0} style={{border:0,padding:0}}>
-          <AccessoryPicker basket={basket} delivery={delivery} onChange={b=>{setBasket(b);setConfirmed(false);}}/>
-          {basket.items.length > 0 && basket.payment !== 'COD' && <label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> 已收到配件款 ¥{money(accessoryAmount(basket))}</label>}
-        </fieldset></details>}
+
       <section className="checkout-card">
         <label htmlFor="orderRemark"><h4><Icon name="edit" />备注</h4></label>
         <input id="orderRemark" className="input" maxLength={200} placeholder={delivery ? '如：空桶放门口、到了先打电话' : '选填'} value={remark} onChange={e => setRemark(e.target.value)} />
@@ -593,7 +579,7 @@ export function OrderMenu({ member, products, counter = false, initialMode = 'DE
       <Holdings products={products} positions={positions} error={deposits.error} />
       <div className="mode-switch" role="tablist" aria-label="取水方式">
         {(['DELIVERY', 'PICKUP'] as const).map(m => (
-          <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? 'active' : ''} onClick={() => { setMode(m); setError(''); if (m==='PICKUP' && basket.payment==='COD') { setBasket({...basket,payment:'WECHAT'}); setConfirmed(false); } }}>
+          <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? 'active' : ''} onClick={() => { setMode(m); setError(''); }}>
             <Icon name={m === 'DELIVERY' ? 'truck' : 'store'} />
             <span><b>{m === 'DELIVERY' ? '送水上门' : counter ? '到店取水' : '到店自提'}</b><small>{m === 'DELIVERY' ? '扣配送票 · 预约时段' : counter ? '扣自提票 · 当场换桶' : '扣自提票 · 凭码领取'}</small></span>
           </button>
@@ -643,7 +629,7 @@ export function CounterOrder({ products, memberId, onMemberChange, onRecharge, o
 }) {
   const api = useApi();
   const member = useLoader(() => memberId ? api.memberProfile(memberId) : Promise.resolve(null), [api, memberId]);
-  if (!memberId) return <><AccessoryOnly onDone={onPlaced} /><CustomerSearch onPick={onMemberChange} onNewMember={onNewMember} /></>;
+  if (!memberId) return <CustomerSearch onPick={onMemberChange} onNewMember={onNewMember} />;
   if (member.error) return <p className="account-error" role="alert">{member.error}</p>;
   const m = member.data;
   if (!m || m.id !== memberId) return <p className="membership-note">正在读取顾客信息…</p>;
@@ -654,7 +640,6 @@ export function CounterOrder({ products, memberId, onMemberChange, onRecharge, o
         <span><b>{m.name}</b><small>{m.phone} · {m.memberNo}</small></span>
         <button type="button" className="btn sm" onClick={() => onMemberChange(undefined)}>换顾客</button>
       </div>
-      <AccessoryOnly memberId={m.id} name={m.name} onDone={onPlaced} />
       <OrderMenu key={m.id} member={m} products={products} counter initialMode="PICKUP"
         onRecharge={onRecharge && (async () => { await onRecharge(m); await member.reload(); })}
         onPlaced={async () => { await member.reload(); await onPlaced?.(); }} />

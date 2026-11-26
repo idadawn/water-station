@@ -146,7 +146,10 @@ export class KunlunApi {
   saveAccessory(id: string | undefined, body: Omit<AccessoryProduct, 'id'>) {
     return id ? this.put<{id: string}>(`/api/accessories/products/${id}`, body) : this.post<{id: string}>('/api/accessories/products', body);
   }
-  sellAccessories(body: { memberId?: string; idempotencyKey: string; basket: AccessoryBasket }) {
+  accessoryDeliveries(memberId: string) {
+    return this.request<{ id: string; orderNo: string; address: string }[]>('/api/accessories/deliveries' + queryString({ memberId }));
+  }
+  sellAccessories(body: { orderId?: string; memberId?: string; idempotencyKey: string; basket: AccessoryBasket }) {
     return this.post<{id: string}>('/api/accessories/sales', body);
   }
   accessorySales(query: { status?: AccessoryStatus; from?: string; to?: string; page?: number } = {}) {

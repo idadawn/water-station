@@ -19,6 +19,7 @@ public static class MobileFeatures
     public static readonly (string Key, string[] Permissions)[] Catalog =
     [
         ("order", [MemberRead, OrderCreate, OrderFulfill, DepositCollect]),
+        ("accessories", [MemberRead, AccessorySell]),
         ("orders", [MemberRead, OrderAccept, OrderFulfill, DepositCollect]),
         ("pickup", [PickupVerify, OrderFulfill]),
         ("members", [MemberRead]),
@@ -41,8 +42,8 @@ public static class MobileFeatures
     /// </summary>
     public static string[] Defaults(string role) => role switch
     {
-        "ADMIN" => ["overview", "order", "orders", "members", "inventory", "recharge", "depositCollect", "depositRefund", "pickup", "movement", "newMember"],
-        "CLERK" => ["order", "orders", "members", "recharge", "depositCollect", "depositRefund", "pickup", "movement", "newMember"],
+        "ADMIN" => ["overview", "order", "orders", "members", "inventory", "recharge", "depositCollect", "depositRefund", "pickup", "movement", "newMember", "accessories"],
+        "CLERK" => ["order", "orders", "members", "recharge", "depositCollect", "depositRefund", "pickup", "movement", "newMember", "accessories"],
         "COURIER" => ["orders", "members", "pickup", "depositCollect", "movement"],
         _ => []
     };
@@ -69,6 +70,8 @@ public static class MobileFeatures
                 updated_at TIMESTAMPTZ,
                 PRIMARY KEY (tenant_id, role)
             );
+            ALTER TABLE plugin_kunlun_waterstation.role_mobile_configs
+                ADD COLUMN IF NOT EXISTS accessory_feature_initialized boolean NOT NULL DEFAULT false;
             """, conn, tx)) await ddl.ExecuteNonQueryAsync(ct);
         foreach (var role in Roles)
         {
@@ -83,6 +86,26 @@ public static class MobileFeatures
             // The first start with this table makes the role's accounts hold exactly what its features grant.
             if (await insert.ExecuteNonQueryAsync(ct) == 1 && role != "ADMIN")
                 await ApplyPermissions(conn, tx, tenantId, role, PermissionsFor(role, features), ct);
+        }
+        // Existing point-of-sale roles retain accessory sales as an independent shortcut. Run once per role
+        // so a later decision to remove the shortcut survives restarts.
+        await LockRoles(conn, tx, tenantId, ct);
+        await using (var migrate = new NpgsqlCommand("""
+            WITH initialized AS (
+                UPDATE plugin_kunlun_waterstation.role_mobile_configs
+                SET features = CASE WHEN features ? 'order' AND NOT features ? 'accessories'
+                                    THEN features || '["accessories"]'::jsonb ELSE features END,
+                    accessory_feature_initialized = true
+                WHERE tenant_id=@tid AND NOT accessory_feature_initialized RETURNING role,features
+            )
+            UPDATE plugin_kunlun_waterstation.staff s SET permissions=s.permissions || jsonb_build_array(@perm::text)
+            FROM initialized c WHERE s.tenant_id=@tid AND s.role=c.role AND (c.role='ADMIN' OR c.features ? 'accessories')
+                AND NOT s.permissions ? @perm
+            """, conn, tx))
+        {
+            migrate.Parameters.AddWithValue("tid", tenantId);
+            migrate.Parameters.AddWithValue("perm", AccessorySell);
+            await migrate.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
     }
