@@ -84,9 +84,9 @@ function RechargeTable({ filter, filtered }: { filter: RechargeLedgerQuery; filt
                   <td>{payMethodLabel(r.payMethod)}</td>
                   <td>{r.refundNo ? <span className="tag orange">已退 ¥{money(r.refundAmount ?? 0)}</span> : <span className="tag green">{r.cardOpenedOn ? '补录开卡' : r.corrected ? '已更正到账' : '已到账'}</span>}</td>
                   <td>{r.operatorName}</td>
-                  <td><button type="button" className="link" onClick={() => dialogs.open(close => <RechargeDetailDialog row={r} onClose={close} />)}>详情</button>
-                    {!r.cardOpenedOn && !r.refundNo && <button type="button" className="link" onClick={() => dialogs.open(close =>
-                      <CorrectionDialog row={r} onClose={close} onDone={refresh} />)}>更正会员</button>}</td>
+                  <td><div className="recharge-row-actions"><button type="button" className="link" onClick={() => dialogs.open(close => <RechargeDetailDialog row={r} onClose={close} />)}>详情</button>
+                    {!r.cardOpenedOn && !r.refundNo && <button type="button" className="btn sm" onClick={() => dialogs.open(close =>
+                      <CorrectionDialog row={r} onClose={close} onDone={refresh} />)}>更正会员</button>}</div></td>
                 </tr>
               );
             })}

@@ -54,8 +54,8 @@ export function App() {
 /** Grouped the way the station is run: daily work, money, containers, catalogue, then settings. Every item has its own icon so the collapsed bar stays readable. */
 const NAV: Array<{ label?: string; items: Array<[string, IconName]> }> = [
   { items: [['dashboard', 'grid']] },
-  { label: '日常业务', items: [['orders', 'order'], ['members', 'users']] },
-  { label: '财务管理', items: [['recharges', 'wallet'], ['accessories','tag'], ['deposits', 'deposit'], ['refunds', 'check'], ['expenses', 'chart']] },
+  { label: '日常业务', items: [['orders', 'order'], ['accessories', 'tag'], ['members', 'users']] },
+  { label: '财务管理', items: [['recharges', 'wallet'], ['deposits', 'deposit'], ['refunds', 'check'], ['expenses', 'chart']] },
   { label: '袋桶管理', items: [['inventory', 'box'], ['assets', 'ledger']] },
   { label: '商品管理', items: [['products', 'drop'], ['plans', 'tag']] },
   { label: '系统设置', items: [['staff-accounts', 'shield'], ['mobile', 'mobile']] },

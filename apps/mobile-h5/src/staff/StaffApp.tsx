@@ -5,11 +5,11 @@ import { DialogProvider, Icon, useAuth, useToast, workbenchTabs } from '@kunlun/
 import '@kunlun/ui/src/workbench.css';
 import { H5Shell } from '../shared/H5Shell';
 import { StaffDataProvider, useMobileLayout, useStaffData } from './data';
-import { StaffCounter, StaffHome, StaffInventory, StaffMembers, StaffOrders, StaffProfile, type StaffPageProps } from './StaffPages';
+import { StaffAccessories, StaffCounter, StaffHome, StaffInventory, StaffMembers, StaffOrders, StaffProfile, type StaffPageProps } from './StaffPages';
 import './staff.css';
 
 const PAGES: Record<string, ComponentType<StaffPageProps>> = {
-  home: StaffHome, order: StaffCounter, orders: StaffOrders, members: StaffMembers, inventory: StaffInventory, profile: StaffProfile,
+  home: StaffHome, order: StaffCounter, accessories: StaffAccessories, orders: StaffOrders, members: StaffMembers, inventory: StaffInventory, profile: StaffProfile,
 };
 /** Pages everyone has; the others belong to the feature that opens them. */
 const OPEN_PAGES = new Set(['home', 'profile']);
@@ -65,7 +65,7 @@ function StaffShell() {
 }
 
 const MOBILE_PAGE_FEATURE: Record<string, MobileFeature | undefined> = {
-  order: mobileFeature('order'), orders: mobileFeature('orders'), members: mobileFeature('members'), inventory: mobileFeature('inventory'),
+  order: mobileFeature('order'), accessories: mobileFeature('accessories'), orders: mobileFeature('orders'), members: mobileFeature('members'), inventory: mobileFeature('inventory'),
 };
 
 function LockedPage({ feature, go }: { feature?: MobileFeature; go: (page: string) => void }) {

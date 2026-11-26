@@ -542,3 +542,8 @@ a{color:var(--brand-600);text-decoration:none}
 .accessory-row small { display: block; color: #53655b; }
 .accessory-row input { max-width: 74px; }
 .accessory-row select { width: auto; }
+
+.accessory-checkout { display: grid; gap: 18px; }
+.accessory-checkout fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.accessory-checkout legend { font-weight: 650; margin-bottom: 10px; }
+.accessory-checkout .member-picker { margin-top: 12px; }

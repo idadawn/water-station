@@ -1,5 +1,5 @@
 import { Stepper } from './stepper';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
   PAY_METHODS,
   money,
@@ -8,10 +8,12 @@ import {
   type AccessoryProduct,
   type AccessorySale,
   type PayMethod,
+  type MemberProfile,
 } from '@kunlun/shared';
 import { useApi } from './auth';
-import { Field, FormDialog, useDialogs, useToast } from './feedback';
-import { useIdempotencyKey, useLoader } from './hooks';
+import { MemberPicker } from './operations/common';
+import { Field, FormDialog, useToast } from './feedback';
+import { newRequestKey, useLoader } from './hooks';
 
 export const accessoryStatus = { PENDING: '待收款', PAID: '已收款', REFUNDED: '已全额退款', VOID: '已取消' };
 export const emptyBasket = (): AccessoryBasket => ({ items: [], payment: 'WECHAT' });
@@ -21,11 +23,11 @@ export const accessoryAmount = (basket: AccessoryBasket) =>
 export function AccessoryPicker({
   basket,
   onChange,
-  delivery = false,
+  delivery,
 }: {
   basket: AccessoryBasket;
+  delivery: boolean;
   onChange(b: AccessoryBasket): void;
-  delivery?: boolean;
 }) {
   const api = useApi();
   const products = useLoader(() => api.accessoryProducts(), [api]);
@@ -89,60 +91,59 @@ export function AccessoryPicker({
   );
 }
 
-export function AccessoryOnly({
-  memberId,
-  name,
-  onDone,
-}: {
-  memberId?: string;
-  name?: string;
-  onDone?: () => void | Promise<void>;
-}) {
-  const dialogs = useDialogs();
-  return (
-    <button
-      type="button"
-      className="btn"
-      onClick={() => dialogs.open((close) => <StandaloneSale memberId={memberId} name={name} onDone={onDone} onClose={close} />)}
-    >
-      {memberId ? '只买配件' : '散客购买配件'}
-    </button>
-  );
-}
-
-function StandaloneSale({
-  memberId,
-  name,
-  onDone,
-  onClose,
-}: {
-  memberId?: string;
-  name?: string;
-  onDone?: () => void | Promise<void>;
-  onClose(): void;
-}) {
+export function AccessoryCheckout({ onSold }: { onSold?: () => void } = {}) {
   const api = useApi();
   const toast = useToast();
-  const key = useIdempotencyKey();
   const [basket, setBasket] = useState(emptyBasket);
-  return (
-    <FormDialog
-      title="配件销售"
-      description={name || '散客'}
-      onClose={onClose}
-      submitLabel={'确认已收 ¥' + money(accessoryAmount(basket))}
-      onSubmit={async () => {
-        if (!basket.items.length) throw new Error('请先选择配件数量');
-        await api.sellAccessories({ memberId, idempotencyKey: key, basket });
-        toast('配件收款已登记');
-        await onDone?.();
-      }}
-    >
-      <div className="accessory-fields">
-        <AccessoryPicker basket={basket} onChange={setBasket} />
-      </div>
-    </FormDialog>
-  );
+  const [customer, setCustomer] = useState<'guest' | 'member'>('guest');
+  const [member, setMember] = useState<MemberProfile | null>(null);
+  const [key, setKey] = useState(newRequestKey);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [orderId, setOrderId] = useState('');
+  const memberId = customer === 'member' ? member?.id : undefined;
+  const deliveries = useLoader(async () => ({ memberId, orders: memberId ? await api.accessoryDeliveries(memberId) : [] }), [api, memberId]);
+  const options = deliveries.data?.memberId === memberId ? deliveries.data?.orders ?? [] : [];
+  const activeOrder = options.find(o => o.id === orderId);
+  const payment = !activeOrder && basket.payment === 'COD' ? 'WECHAT' : basket.payment;
+  const total = accessoryAmount(basket);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy || !basket.items.length || (customer === 'member' && !member)) return;
+    setBusy(true); setError('');
+    try {
+      await api.sellAccessories({ memberId, orderId: activeOrder?.id, idempotencyKey: key, basket: { ...basket, payment } });
+      toast((payment === 'COD' ? '已登记送达收款 · ¥' : '配件收款已登记 · ¥') + money(total));
+      setBasket(emptyBasket()); setOrderId(''); setMember(null); setCustomer('guest'); setKey(newRequestKey());
+      onSold?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <form onSubmit={submit} className="accessory-checkout">
+    <fieldset disabled={busy}>
+      <legend>购买顾客</legend>
+      <div className="slot-chips">{(['guest', 'member'] as const).map(type =>
+        <button type="button" key={type} aria-pressed={customer === type} className={customer === type ? 'active' : ''}
+          onClick={() => { setCustomer(type); setOrderId(''); }}>{type === 'guest' ? '散客' : '会员'}</button>)}</div>
+      {customer === 'member' && <MemberPicker id="accessory-member" value={member} onChange={m => { setMember(m); setOrderId(''); }} />}
+    </fieldset>
+    {memberId && options.length > 0 && <label>配送方式
+      <select className="select" value={activeOrder?.id ?? ''} onChange={e => setOrderId(e.target.value)} disabled={busy}>
+        <option value="">门店取件</option>
+        {options.map(o => <option key={o.id} value={o.id}>随水配送 · {o.orderNo} · {o.address}</option>)}
+      </select></label>}
+    {memberId && deliveries.error && <p role="alert">配送单读取失败 <button type="button" className="link" onClick={deliveries.reload}>重试</button></p>}
+    <fieldset disabled={busy}><legend>选择配件</legend><AccessoryPicker basket={{ ...basket, payment }} delivery={!!activeOrder} onChange={setBasket} /></fieldset>
+    {error && <p className="account-error" role="alert">{error}</p>}
+    <button type="submit" className="btn primary" disabled={busy || !basket.items.length || (customer === 'member' && !member)}>
+      {busy ? '正在登记…' : (payment === 'COD' ? '登记送达收款 ¥' : '确认已收 ¥') + money(total)}
+    </button>
+  </form>;
 }
 
 type SettlementSale = Pick<AccessorySale, 'id' | 'saleNo' | 'amount' | 'payMethod'>;

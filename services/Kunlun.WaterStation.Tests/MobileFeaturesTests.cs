@@ -57,6 +57,27 @@ public sealed class MobileFeaturesTests(TestHost host)
     }
 
     [Fact]
+    public async Task Accessory_Sales_And_Water_Orders_Can_Be_Enabled_Independently()
+    {
+        using var admin = await Login("YG0001");
+        using var clerk = await Login("YG0012");
+        var original = Strings((await Role(admin, "CLERK")).GetProperty("features"));
+        try
+        {
+            var sales = await Ok(await Save(admin, "CLERK", "accessories"));
+            Assert.Contains(AccessorySell, Strings(sales.GetProperty("permissions")));
+            Assert.DoesNotContain(OrderCreate, Strings(sales.GetProperty("permissions")));
+            Assert.Equal(HttpStatusCode.OK, (await clerk.GetAsync("/api/accessories/products")).StatusCode);
+
+            var water = await Ok(await Save(admin, "CLERK", "order"));
+            Assert.Contains(OrderCreate, Strings(water.GetProperty("permissions")));
+            Assert.DoesNotContain(AccessorySell, Strings(water.GetProperty("permissions")));
+            Assert.Equal(HttpStatusCode.Forbidden, (await clerk.GetAsync("/api/accessories/products")).StatusCode);
+        }
+        finally { await Ok(await Save(admin, "CLERK", original)); }
+    }
+
+    [Fact]
     public async Task Courier_Features_Decide_What_A_Signed_In_Courier_May_Do_On_The_Next_Request()
     {
         using var admin = await Login("YG0001");

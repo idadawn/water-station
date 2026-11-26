@@ -9,14 +9,14 @@ namespace Kunlun.WaterStation.Operations;
 public sealed record AccessoryProductInput(string Name, string Unit, decimal Price, bool Active);
 public sealed record AccessoryItem(Guid ProductId, int Quantity, decimal Price);
 public sealed record AccessoryBasket(AccessoryItem[] Items, string Payment);
-public sealed record SellAccessories(string IdempotencyKey, Guid? MemberId, AccessoryBasket Basket);
+public sealed record SellAccessories(string IdempotencyKey, Guid? MemberId, AccessoryBasket Basket, Guid? OrderId = null);
 public sealed record AccessoryPayment(string PayMethod, string? Reason);
 
 public static class Accessories
 {
     private static bool Admin(ClaimsPrincipal u) => u.HasClaim("role", "ADMIN");
-    private static bool Clerk(ClaimsPrincipal u) => u.HasClaim("perm", KunlunPermissions.OrderCreate);
-    private static bool Collect(ClaimsPrincipal u) => Clerk(u) || u.HasClaim("perm", KunlunPermissions.OrderFulfill) || u.HasClaim("perm", KunlunPermissions.OrderAccept);
+    private static bool CanSell(ClaimsPrincipal u) => u.HasClaim("perm", KunlunPermissions.AccessorySell);
+    private static bool Collect(ClaimsPrincipal u) => CanSell(u) || u.HasClaim("perm", KunlunPermissions.OrderFulfill) || u.HasClaim("perm", KunlunPermissions.OrderAccept);
     private static string Actor(ClaimsPrincipal u) => u.FindFirstValue("display_name") ?? "员工";
     private static bool Payment(string? method) => method is "WECHAT" or "ALIPAY" or "CASH" or "BANK";
 
@@ -48,7 +48,7 @@ public static class Accessories
         var api = app.MapGroup("/api/accessories").RequireAuthorization();
         api.MapGet("/products", async (bool? all, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) =>
         {
-            if (!Clerk(user) && !Admin(user) || all == true && !Admin(user)) return Results.Forbid();
+            if (!CanSell(user) && !Admin(user) || all == true && !Admin(user)) return Results.Forbid();
             await using var conn = await db.OpenConnectionAsync(ct);
             await using var cmd = Command(conn, null, "SELECT id,name,unit,price,active FROM plugin_kunlun_waterstation.accessory_products WHERE tenant_id=@tid AND (@all OR active) ORDER BY active DESC,name,id", ("tid", repo.DefaultTenantId), ("all", all == true));
             await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -58,22 +58,48 @@ public static class Accessories
         });
         api.MapPost("/products", (AccessoryProductInput req, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) => Save(null, req, user, db, repo, ct));
         api.MapPut("/products/{id:guid}", (Guid id, AccessoryProductInput req, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) => Save(id, req, user, db, repo, ct));
+        api.MapGet("/deliveries", async (Guid memberId, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) =>
+        {
+            if (!CanSell(user)) return Results.Forbid();
+            await using var conn = await db.OpenConnectionAsync(ct);
+            await using var cmd = Command(conn, null, """
+                SELECT o.id,o.order_no,o.address_snapshot->>'address' FROM plugin_kunlun_waterstation.water_orders o
+                WHERE o.tenant_id=@tid AND o.member_id=@mid AND o.fulfill_mode='DELIVERY' AND o.status IN ('PENDING','DISPATCHED')
+                  AND NOT EXISTS (SELECT 1 FROM plugin_kunlun_waterstation.accessory_sales s WHERE s.order_id=o.id)
+                ORDER BY o.created_at DESC,o.id
+                """, ("tid",repo.DefaultTenantId), ("mid",memberId));
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            var orders = new List<object>();
+            while (await r.ReadAsync(ct)) orders.Add(new { id=r.GetGuid(0), orderNo=r.GetString(1), address=r.IsDBNull(2) ? "" : r.GetString(2) });
+            return Results.Ok(orders);
+        });
         api.MapPost("/sales", async (SellAccessories req, ClaimsPrincipal user, NpgsqlDataSource db, KunlunAuthRepository repo, CancellationToken ct) =>
         {
-            if (!Clerk(user)) return Results.Forbid();
+            if (!CanSell(user)) return Results.Forbid();
             await using var conn = await db.OpenConnectionAsync(ct);
             await using var tx = await conn.BeginTransactionAsync(ct);
             var tid = repo.DefaultTenantId;
             await LockRequest(conn, tx, tid, "accessory-sale", req.IdempotencyKey, ct);
             var payload = Payload(req.Basket, req.MemberId);
-            await using (var cmd = Command(conn, tx, "SELECT id,request_payload=@payload::jsonb FROM plugin_kunlun_waterstation.accessory_sales WHERE tenant_id=@tid AND request_key=@key", ("tid", tid), ("key", "sale:" + req.IdempotencyKey), ("payload", payload)))
+            await using (var cmd = Command(conn, tx, "SELECT id,request_payload=@payload::jsonb AND order_id IS NOT DISTINCT FROM @order::uuid FROM plugin_kunlun_waterstation.accessory_sales WHERE tenant_id=@tid AND request_key=@key", ("tid", tid), ("key", "sale:" + req.IdempotencyKey), ("payload", payload), ("order",(object?)req.OrderId ?? DBNull.Value)))
             await using (var r = await cmd.ExecuteReaderAsync(ct)) if (await r.ReadAsync(ct))
             {
                 if (!r.GetBoolean(1)) throw new BusinessRuleException("请求标识已用于其他配件销售", 409);
                 return Results.Ok(new { id = r.GetGuid(0) });
             }
+            if (req.OrderId is Guid order)
+            {
+                if (req.MemberId is not Guid owner) throw new BusinessRuleException("请先选择配送会员");
+                await using var delivery = Command(conn,tx,"""
+                    SELECT id FROM plugin_kunlun_waterstation.water_orders WHERE tenant_id=@tid AND id=@id AND member_id=@mid
+                      AND fulfill_mode='DELIVERY' AND status IN ('PENDING','DISPATCHED') FOR UPDATE
+                    """,("tid",tid),("id",order),("mid",owner));
+                if (await delivery.ExecuteScalarAsync(ct) is null) throw new BusinessRuleException("该会员的配送单已不可用，请重新选择",409);
+                await using var existing = Command(conn,tx,"SELECT id FROM plugin_kunlun_waterstation.accessory_sales WHERE order_id=@id",("id",order));
+                if (await existing.ExecuteScalarAsync(ct) is not null) throw new BusinessRuleException("这张配送单已关联配件销售",409);
+            }
             if (req.MemberId is Guid mid) await LockMember(conn, tx, tid, mid, ct);
-            var id = await Create(conn, tx, tid, req.MemberId, null, req.Basket, "sale:" + req.IdempotencyKey, false, Actor(user), ct);
+            var id = await Create(conn, tx, tid, req.MemberId, req.OrderId, req.Basket, "sale:" + req.IdempotencyKey, req.OrderId.HasValue, Actor(user), ct);
             await tx.CommitAsync(ct);
             return Results.Ok(new { id });
         });
@@ -110,7 +136,7 @@ public static class Accessories
 
     internal static async Task CheckReplay(NpgsqlConnection conn, NpgsqlTransaction tx, Guid tid, Guid orderId, Guid mid, AccessoryBasket? basket, CancellationToken ct)
     {
-        await using var cmd = Command(conn, tx, "SELECT request_payload=@payload::jsonb FROM plugin_kunlun_waterstation.accessory_sales WHERE tenant_id=@tid AND order_id=@id",
+        await using var cmd = Command(conn, tx, "SELECT request_payload=@payload::jsonb FROM plugin_kunlun_waterstation.accessory_sales WHERE tenant_id=@tid AND order_id=@id AND request_key LIKE 'order:%'",
             ("tid", tid), ("id", orderId), ("payload", basket == null ? "null" : Payload(basket, mid)));
         var matches = await cmd.ExecuteScalarAsync(ct);
         if (basket == null ? matches != null : matches is not true) throw new BusinessRuleException("此水单已提交，配件信息与原单不同", 409);

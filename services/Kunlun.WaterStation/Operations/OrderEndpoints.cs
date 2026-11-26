@@ -105,6 +105,8 @@ public static class OrderEndpoints
                 }
             }
 
+            if (req.Accessories is not null && !user.HasClaim("perm", KunlunPermissions.AccessorySell))
+                return Results.Forbid();
             var product = await WaterProducts.Read(conn, tx, orderRepo.TenantId, req.WaterType, ct);
             if (req.FulfillMode == "DELIVERY" && req.OrderQty < product.DeliveryMinimum)
                 throw new BusinessRuleException($"{product.Name}免费配送，{product.DeliveryMinimum}{product.Unit}起送");

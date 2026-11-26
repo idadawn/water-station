@@ -99,6 +99,26 @@ public sealed partial class MembershipTests
     }
 
     [Fact]
+    public async Task Separate_Sale_Can_Join_An_Open_Delivery_Once_Without_Changing_Water_Order_Replay()
+    {
+        using var c = await Admin();
+        var mid = await Member(c);
+        await Recharge(c, mid, await Plan(c, mode: "DELIVERY"));
+        var water = new CreateWaterOrderRequest(mid, "BUCKET_18_9L", "DELIVERY", 2, Key());
+        var order = (await Ok(await c.PostAsJsonAsync("/api/orders", water))).GetProperty("id").GetGuid();
+        var eligible = $"/api/accessories/deliveries?memberId={mid}";
+        Assert.Equal(order, (await c.GetFromJsonAsync<JsonElement>(eligible))[0].GetProperty("id").GetGuid());
+        var product = (await Ok(await c.PostAsJsonAsync("/api/accessories/products", new AccessoryProductInput("门店配件-" + Key(), "个", 15, true)))).GetProperty("id").GetGuid();
+        var sale = new SellAccessories(Key(), mid, new AccessoryBasket([new(product, 1, 15)], "COD"), order);
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsJsonAsync("/api/accessories/sales", sale with { MemberId = await Member(c) })).StatusCode);
+        var id = (await Ok(await c.PostAsJsonAsync("/api/accessories/sales", sale))).GetProperty("id").GetGuid();
+        Assert.Equal(id, (await Ok(await c.PostAsJsonAsync("/api/accessories/sales", sale))).GetProperty("id").GetGuid());
+        Assert.Empty((await c.GetFromJsonAsync<JsonElement>(eligible)).EnumerateArray());
+        Assert.Equal(HttpStatusCode.Conflict, (await c.PostAsJsonAsync("/api/accessories/sales", sale with { IdempotencyKey = Key() })).StatusCode);
+        Assert.Equal(order, (await Ok(await c.PostAsJsonAsync("/api/orders", water))).GetProperty("id").GetGuid());
+    }
+
+    [Fact]
     public async Task Water_Order_And_Accessories_Commit_Atomically_And_Cod_Waits_For_Collection()
     {
         using var c = await Admin();

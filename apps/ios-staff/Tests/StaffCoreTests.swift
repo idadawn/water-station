@@ -8,6 +8,7 @@ private func url(_ text: String) -> URL { URL(string: text)! }
     @Test func staffPagesAndHashedAssetsComeFromTheBundle() {
         #expect(StaffRoutes.resource(for: url("kunlun-staff://localhost/staff/orders?q=1")) == .page)
         #expect(StaffRoutes.resource(for: url("kunlun-staff://localhost/staff/inventory")) == .page)
+        #expect(StaffRoutes.resource(for: url("kunlun-staff://localhost/staff/accessories")) == .page)
         #expect(StaffRoutes.resource(for: url("kunlun-staff://localhost/static/h5/index-Ab12.js")) == .asset("www/static/h5/index-Ab12.js"))
         #expect(StaffRoutes.allowsNavigation(to: StaffRoutes.start))
         for other in ["kunlun-staff://localhost/member", "kunlun-staff://localhost/admin", "kunlun-staff://localhost/favicon.ico", "kunlun-staff://localhost/staff/"] {

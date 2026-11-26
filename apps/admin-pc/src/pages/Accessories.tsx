@@ -10,7 +10,8 @@ import {
   type DateFilter,
 } from '@kunlun/shared';
 import {
-  AccessoryOnly,
+  AccessoryCheckout,
+  Dialog,
   AccessorySettlement,
   Field,
   FormDialog,
@@ -37,7 +38,10 @@ export function Accessories() {
         </div>
         <div className="head-actions">
           {tab === 'sales' ? (
-            <AccessoryOnly onDone={refresh} />
+            <button type="button" className="btn primary" onClick={() => dialogs.open(close =>
+              <Dialog title="登记配件销售" onClose={close}><AccessoryCheckout onSold={() => { close(); void refresh(); }} /></Dialog>)}>
+              登记销售
+            </button>
           ) : (
             <button type="button" className="btn primary" onClick={() => edit()}>
               新增配件

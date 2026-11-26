@@ -17,7 +17,7 @@ export const WEB_ROUTES: Record<AppArea, AreaRoutes> = {
   staff: {
     home: 'home',
     // 工作台和我的人人都有；其他页面跟着角色开通的手机端功能走。
-    pages: ['home', 'order', 'orders', 'members', 'inventory', 'profile'],
+    pages: ['home', 'order', 'accessories', 'orders', 'members', 'inventory', 'profile'],
   },
   // 会员端只查记录：点单和地址页已取消，旧链接分别落到首页和个人中心。
   member: {
